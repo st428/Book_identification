@@ -1,0 +1,268 @@
+:root {
+  --ink: #18201c;
+  --muted: #65746c;
+  --paper: #f6f1e7;
+  --card: #fffaf0;
+  --accent: #126a4a;
+  --accent-2: #e2572f;
+  --line: rgba(24, 32, 28, 0.14);
+  --green: #129447;
+  --yellow: #c48a00;
+  --red: #c9382d;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  color: var(--ink);
+  font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
+  background:
+    radial-gradient(circle at 20% 0%, rgba(226, 87, 47, 0.16), transparent 32rem),
+    linear-gradient(145deg, #f8f3e8 0%, #e7efe7 100%);
+}
+
+.page {
+  width: min(980px, 100%);
+  margin: 0 auto;
+  padding: 24px 16px 40px;
+}
+
+.hero {
+  padding: 22px 4px 12px;
+}
+
+.eyebrow {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+h1 {
+  margin: 8px 0;
+  font-size: clamp(32px, 10vw, 56px);
+  line-height: 1.02;
+}
+
+h2,
+h3,
+h4 {
+  margin: 0;
+}
+
+.subtitle,
+.message,
+.meta,
+.status,
+.hint {
+  color: var(--muted);
+}
+
+.status {
+  display: inline-flex;
+  margin-top: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 250, 240, 0.72);
+}
+
+.card {
+  margin-top: 16px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: rgba(255, 250, 240, 0.9);
+  box-shadow: 0 18px 50px rgba(18, 106, 74, 0.12);
+}
+
+.field-label {
+  display: block;
+  margin: 12px 0 8px;
+  font-weight: 700;
+}
+
+input,
+select,
+button {
+  width: 100%;
+  min-height: 48px;
+  border-radius: 14px;
+  font: inherit;
+}
+
+input,
+select {
+  border: 1px solid var(--line);
+  padding: 10px 12px;
+  background: white;
+}
+
+button {
+  margin-top: 18px;
+  border: 0;
+  color: white;
+  font-weight: 800;
+  background: linear-gradient(135deg, var(--accent), #1d9b70);
+}
+
+.secondary-button {
+  min-height: 40px;
+  margin-top: 10px;
+  color: var(--accent);
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+button:disabled,
+input:disabled,
+select:disabled {
+  opacity: 0.58;
+}
+
+.result-header,
+.item-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.report-link {
+  color: var(--accent-2);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.results-list {
+  display: grid;
+  gap: 18px;
+  margin-top: 18px;
+}
+
+.result-item {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.56);
+}
+
+.cache-pill {
+  flex: 0 0 auto;
+  padding: 5px 10px;
+  border-radius: 999px;
+  color: white;
+  font-size: 12px;
+  font-weight: 800;
+  background: var(--accent-2);
+}
+
+.cache-pill.cached {
+  background: var(--accent);
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.stats div {
+  padding: 12px 8px;
+  border-radius: 16px;
+  text-align: center;
+  background: #eef5ec;
+}
+
+.stats div:nth-child(2) strong {
+  color: var(--green);
+}
+
+.stats div:nth-child(3) strong {
+  color: var(--yellow);
+}
+
+.stats div:nth-child(4) strong {
+  color: var(--red);
+}
+
+.stats strong {
+  display: block;
+  font-size: 24px;
+}
+
+.stats span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.annotated-image {
+  display: block;
+  width: 100%;
+  margin-top: 14px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+}
+
+.suggestion-box {
+  margin-top: 14px;
+  padding: 14px;
+  border-radius: 18px;
+  background: #f1f7ef;
+}
+
+.suggestion-box h4 {
+  margin-bottom: 8px;
+  color: var(--accent);
+}
+
+details {
+  margin-top: 14px;
+}
+
+ol,
+ul {
+  padding-left: 24px;
+}
+
+li + li {
+  margin-top: 4px;
+}
+
+.order-green {
+  color: var(--green);
+}
+
+.order-yellow {
+  color: var(--yellow);
+}
+
+.order-red {
+  color: var(--red);
+  font-weight: 800;
+}
+
+.hidden {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .result-header,
+  .item-title {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .report-link {
+    white-space: normal;
+  }
+}

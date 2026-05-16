@@ -1,0 +1,6 @@
+numpy
+opencv-python
+python-bidi==0.4.2
+paddleocr
+paddlepaddle
+flask

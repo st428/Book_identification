@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>书架智能巡检移动端</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <p class="eyebrow">Library Shelf Inspector</p>
+      <h1>拍照识别书架索书号</h1>
+      <p class="subtitle">手机拍照或批量选择图片，电脑端调用提速版 OCR 完成识别、排序检测和调架建议。</p>
+      <div id="ocrStatus" class="status">OCR 状态：检查中...</div>
+    </section>
+
+    <section class="card">
+      <label class="field-label" for="imageInput">选择或拍摄书架图片</label>
+      <input id="imageInput" type="file" accept="image/*" multiple>
+      <p id="fileSummary" class="hint">可一次选择多张图片；如果手机一次只能选一张，可以连续选择多次再开始识别。</p>
+      <button id="clearFilesButton" class="secondary-button" type="button">清空已选图片</button>
+
+      <label class="field-label" for="modeSelect">处理模式</label>
+      <select id="modeSelect">
+        <option value="standard" selected>标准模式（推荐）</option>
+        <option value="fast">快速模式</option>
+        <option value="fine">精细模式</option>
+      </select>
+
+      <button id="submitButton" type="button">开始识别</button>
+      <p id="message" class="message">请选择图片后开始识别。</p>
+    </section>
+
+    <section id="resultCard" class="card result hidden">
+      <div class="result-header">
+        <div>
+          <h2>识别结果</h2>
+          <p id="batchMeta" class="meta"></p>
+        </div>
+      </div>
+      <div id="resultsList" class="results-list"></div>
+    </section>
+  </main>
+
+  <template id="resultTemplate">
+    <article class="result-item">
+      <div class="item-title">
+        <h3 class="image-name"></h3>
+        <span class="cache-pill"></span>
+      </div>
+      <div class="stats">
+        <div><strong class="total-count">0</strong><span>检测数</span></div>
+        <div><strong class="green-count">0</strong><span>绿色</span></div>
+        <div><strong class="yellow-count">0</strong><span>黄色</span></div>
+        <div><strong class="red-count">0</strong><span>红色</span></div>
+      </div>
+      <p class="meta item-meta"></p>
+      <img class="annotated-image" alt="识别标注图">
+      <section class="suggestion-box">
+        <h4>调架建议</h4>
+        <ul class="suggestion-list"></ul>
+      </section>
+      <details>
+        <summary>查看识别顺序</summary>
+        <ol class="order-list"></ol>
+      </details>
+    </article>
+  </template>
+
+  <script>
+    const imageInput = document.querySelector("#imageInput");
+    const modeSelect = document.querySelector("#modeSelect");
+    const submitButton = document.querySelector("#submitButton");
+    const clearFilesButton = document.querySelector("#clearFilesButton");
+    const message = document.querySelector("#message");
+    const resultCard = document.querySelector("#resultCard");
+    const ocrStatus = document.querySelector("#ocrStatus");
+    const fileSummary = document.querySelector("#fileSummary");
+    const batchMeta = document.querySelector("#batchMeta");
+    const resultsList = document.querySelector("#resultsList");
+    const resultTemplate = document.querySelector("#resultTemplate");
+    let selectedFiles = [];
+
+    async function refreshStatus() {
+      try {
+        const response = await fetch("/api/status");
+        const data = await response.json();
+        const labels = {
+          loaded: "OCR 状态：已加载",
+          loading: "OCR 状态：加载中",
+          not_loaded: "OCR 状态：未加载"
+        };
+        ocrStatus.textContent = labels[data.ocr_status] || "OCR 状态：未知";
+      } catch {
+        ocrStatus.textContent = "OCR 状态：无法连接服务";
+      }
+    }
+
+    async function preload() {
+      try {
+        await fetch("/api/preload", { method: "POST" });
+      } catch {}
+    }
+
+    function updateFileSummary() {
+      const count = selectedFiles.length;
+      if (count === 0) {
+        fileSummary.textContent = "可一次选择多张图片；如果手机一次只能选一张，可以连续选择多次再开始识别。";
+      } else {
+        const names = selectedFiles.slice(0, 3).map((file) => file.name).join("、");
+        const suffix = count > 3 ? ` 等 ${count} 张` : ` 共 ${count} 张`;
+        fileSummary.textContent = `已选择：${names}${suffix}。`;
+      }
+    }
+
+    function fileKey(file) {
+      return `${file.name}_${file.size}_${file.lastModified}`;
+    }
+
+    function addSelectedFiles(files) {
+      const known = new Set(selectedFiles.map(fileKey));
+      files.forEach((file) => {
+        if (!known.has(fileKey(file))) {
+          selectedFiles.push(file);
+          known.add(fileKey(file));
+        }
+      });
+      imageInput.value = "";
+      updateFileSummary();
+    }
+
+    function renderResult(item) {
+      const node = resultTemplate.content.firstElementChild.cloneNode(true);
+      node.querySelector(".image-name").textContent = item.image;
+      node.querySelector(".cache-pill").textContent = item.from_cache ? "已用缓存" : "新识别";
+      node.querySelector(".cache-pill").classList.toggle("cached", item.from_cache);
+      node.querySelector(".total-count").textContent = item.counts.total;
+      node.querySelector(".green-count").textContent = item.counts.green;
+      node.querySelector(".yellow-count").textContent = item.counts.yellow;
+      node.querySelector(".red-count").textContent = item.counts.red;
+      node.querySelector(".item-meta").textContent = `方向：${item.rotate || "auto"}，耗时：${item.elapsed_seconds}s`;
+      node.querySelector(".annotated-image").src = item.annotated_url + "?t=" + Date.now();
+
+      const suggestionList = node.querySelector(".suggestion-list");
+      item.suggestions.forEach((text) => {
+        const li = document.createElement("li");
+        li.textContent = text;
+        suggestionList.appendChild(li);
+      });
+
+      const orderList = node.querySelector(".order-list");
+      const orderItems = item.order_items || item.actual_order.map((text) => ({ text, status_label: "未知" }));
+      orderItems.forEach((entry) => {
+        const li = document.createElement("li");
+        li.textContent = `${entry.text}（${entry.status_label}）`;
+        li.className = `order-${entry.status || "unknown"}`;
+        orderList.appendChild(li);
+      });
+
+      resultsList.appendChild(node);
+    }
+
+    submitButton.addEventListener("click", async () => {
+      const files = selectedFiles;
+      if (files.length === 0) {
+        message.textContent = "请先选择或拍摄图片。";
+        return;
+      }
+
+      const formData = new FormData();
+      files.forEach((file) => formData.append("images", file));
+      formData.append("mode", modeSelect.value);
+
+      submitButton.disabled = true;
+      clearFilesButton.disabled = true;
+      modeSelect.disabled = true;
+      imageInput.disabled = true;
+      message.textContent = `正在上传并识别 ${files.length} 张图片，请稍等...`;
+      resultCard.classList.add("hidden");
+      resultsList.innerHTML = "";
+
+      try {
+        const response = await fetch("/api/inspect", { method: "POST", body: formData });
+        const data = await response.json();
+        if (!data.ok) {
+          throw new Error(data.error || "识别失败");
+        }
+
+        batchMeta.textContent = `模式：${data.mode}，共 ${data.total} 张，其中 ${data.cached} 张使用缓存。`;
+        data.results.forEach(renderResult);
+
+        resultCard.classList.remove("hidden");
+        message.textContent = "识别完成。";
+        refreshStatus();
+      } catch (error) {
+        message.textContent = error.message;
+      } finally {
+        submitButton.disabled = false;
+        clearFilesButton.disabled = false;
+        modeSelect.disabled = false;
+        imageInput.disabled = false;
+      }
+    });
+
+    imageInput.addEventListener("change", () => addSelectedFiles(Array.from(imageInput.files)));
+    clearFilesButton.addEventListener("click", () => {
+      selectedFiles = [];
+      imageInput.value = "";
+      updateFileSummary();
+    });
+    refreshStatus();
+    preload();
+    setInterval(refreshStatus, 2500);
+  </script>
+</body>
+</html>
