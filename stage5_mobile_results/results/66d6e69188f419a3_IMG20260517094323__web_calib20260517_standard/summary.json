@@ -1,0 +1,42 @@
+{
+  "image": "D:\\个人\\university\\2026spring\\lib\\upload\\stage5_mobile_results\\uploads\\66d6e69188f419a3_IMG20260517094323.jpg",
+  "ocr_enabled": true,
+  "rotate_mode": "none",
+  "total_detected": 14,
+  "green": 13,
+  "yellow": 0,
+  "red": 1,
+  "elapsed_seconds": 40.067,
+  "actual_order": [
+    "D669.3/F",
+    "D669.3",
+    "D669.3",
+    "D669.3/0",
+    "D669",
+    "D669",
+    "D669.3",
+    "D669.3",
+    "D669",
+    "D669.3",
+    "D669.3",
+    "D669.3",
+    "D6693",
+    "D669.3"
+  ],
+  "recommended_order": [
+    "D669.3/F",
+    "D669.3",
+    "D669.3",
+    "D669.3/0",
+    "D669",
+    "D669",
+    "D669.3",
+    "D669.3",
+    "D669",
+    "D669.3",
+    "D669.3",
+    "D669.3",
+    "D669.3",
+    "D6693"
+  ]
+}

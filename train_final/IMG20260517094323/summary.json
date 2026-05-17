@@ -1,0 +1,36 @@
+{
+  "image": "traindata\\IMG20260517094323.jpg",
+  "ocr_enabled": true,
+  "rotate_mode": "none",
+  "total_detected": 11,
+  "green": 10,
+  "yellow": 1,
+  "red": 0,
+  "elapsed_seconds": 48.999,
+  "actual_order": [
+    "D669.3/F",
+    "D669.3",
+    "D669.3",
+    "D669.3/0",
+    "D669.3",
+    "D669.3",
+    "D669.3",
+    "D669.3",
+    "D669.3",
+    "D669.3/1",
+    "D669.3"
+  ],
+  "recommended_order": [
+    "D669.3/F",
+    "D669.3",
+    "D669.3",
+    "D669.3/0",
+    "D669.3",
+    "D669.3",
+    "D669.3",
+    "D669.3",
+    "D669.3",
+    "D669.3/1",
+    "D669.3"
+  ]
+}

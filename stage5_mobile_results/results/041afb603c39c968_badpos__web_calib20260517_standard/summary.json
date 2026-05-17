@@ -1,0 +1,12 @@
+{
+  "image": "D:\\个人\\university\\2026spring\\lib\\upload\\stage5_mobile_results\\uploads\\041afb603c39c968_badpos.jpg",
+  "ocr_enabled": true,
+  "rotate_mode": "bad_position",
+  "total_detected": 0,
+  "green": 0,
+  "yellow": 0,
+  "red": 0,
+  "elapsed_seconds": 0.361,
+  "actual_order": [],
+  "recommended_order": []
+}

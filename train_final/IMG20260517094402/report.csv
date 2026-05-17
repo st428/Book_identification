@@ -1,0 +1,28 @@
+﻿actual_position,raw_text,clean_text,confidence,parse_ok,status,reason,recommended_position,red_box,crop_box,crop_path
+1,D669.3/JYQ,D669.3/JYQ,0.9929,True,green,排序正确,1,"[0, 646, 8, 151]","[30, 646, 39, 151]",train_final\IMG20260517094402\crops\ocr_crop_004.jpg
+2,D669.3/KW,D669.3/KW,0.9956,True,green,排序正确,2,"[0, 660, 8, 128]","[75, 660, 37, 128]",train_final\IMG20260517094402\crops\ocr_crop_013.jpg
+3,D669.3/LB1,D669.3/LB1,0.9688,True,green,排序正确,3,"[0, 640, 8, 162]","[118, 640, 39, 162]",train_final\IMG20260517094402\crops\ocr_crop_001.jpg
+4,D669.3/LB 2,D669.3/LB2,0.9679,True,green,排序正确,4,"[0, 645, 8, 158]","[157, 645, 36, 158]",train_final\IMG20260517094402\crops\ocr_crop_005.jpg
+5,D669.3/LB 3,D669.3/LB3,0.9825,True,green,排序正确,5,"[0, 643, 8, 161]","[196, 643, 35, 161]",train_final\IMG20260517094402\crops\ocr_crop_003.jpg
+6,D669.3/LBC,D669.3/LBC,0.9957,True,green,排序正确,6,"[0, 649, 8, 146]","[232, 649, 36, 146]",train_final\IMG20260517094402\crops\ocr_crop_006.jpg
+7,D669.3/LBK1,D669.3/LBK1,0.9906,True,green,排序正确,7,"[0, 641, 8, 156]","[278, 641, 34, 156]",train_final\IMG20260517094402\crops\ocr_crop_002.jpg
+8,D669.3/LC,D669.3/LC,0.9959,True,green,排序正确,8,"[0, 653, 8, 129]","[321, 653, 34, 129]",train_final\IMG20260517094402\crops\ocr_crop_007.jpg
+9,D669.3/LCJ,D669.3/LCJ,0.9917,True,green,排序正确,9,"[0, 657, 8, 142]","[358, 657, 36, 142]",train_final\IMG20260517094402\crops\ocr_crop_014.jpg
+10,D669.3/LCR,D669.3/LCR,0.9984,True,green,排序正确,10,"[0, 660, 8, 146]","[397, 660, 36, 146]",train_final\IMG20260517094402\crops\ocr_crop_018.jpg
+11,D669.3/LCR1,D669.3/LCR1,0.9971,True,green,排序正确,11,"[0, 651, 8, 156]","[438, 651, 37, 156]",train_final\IMG20260517094402\crops\ocr_crop_011.jpg
+12,D669.3/LCX,D669.3/LCX,0.9946,True,green,排序正确,12,"[0, 655, 8, 148]","[500, 655, 41, 148]",train_final\IMG20260517094402\crops\ocr_crop_012.jpg
+13,D669.3/LCY,D669.3/LCY,0.9982,True,green,排序正确,13,"[0, 660, 8, 146]","[545, 660, 36, 146]",train_final\IMG20260517094402\crops\ocr_crop_019.jpg
+14,D669.3/LDG,D669.3/LDG,0.9965,True,green,排序正确,14,"[0, 663, 8, 148]","[638, 663, 37, 148]",train_final\IMG20260517094402\crops\ocr_crop_023.jpg
+15,D669.3/LDP,D669.3/LDP,0.9986,True,green,排序正确,15,"[0, 665, 8, 143]","[679, 665, 35, 143]",train_final\IMG20260517094402\crops\ocr_crop_024.jpg
+16,D669.3/LDQ,D669.3/LDQ,0.9964,True,green,排序正确,16,"[0, 665, 8, 143]","[734, 665, 36, 143]",train_final\IMG20260517094402\crops\ocr_crop_025.jpg
+17,D669.3/LF,D669.3/LF,0.9937,True,green,排序正确,17,"[0, 664, 8, 136]","[776, 664, 38, 136]",train_final\IMG20260517094402\crops\ocr_crop_021.jpg
+18,D669.3/LF1,D669.3/LF1,0.9955,True,green,排序正确,18,"[0, 648, 8, 161]","[815, 648, 42, 161]",train_final\IMG20260517094402\crops\ocr_crop_008.jpg
+19,D669.3/LF2,D669.3/LF2,0.9981,True,green,排序正确,19,"[0, 656, 8, 158]","[856, 656, 39, 158]",train_final\IMG20260517094402\crops\ocr_crop_016.jpg
+20,D669.3/LFG,D669.3/LFG,0.9939,True,green,排序正确,20,"[0, 660, 8, 146]","[898, 660, 40, 146]",train_final\IMG20260517094402\crops\ocr_crop_020.jpg
+21,D669.3/LFQ,D669.3/LFQ,0.9936,True,green,排序正确,21,"[0, 648, 8, 163]","[944, 648, 41, 163]",train_final\IMG20260517094402\crops\ocr_crop_009.jpg
+22,D669.3/LH,D669.3/LH,0.9946,True,green,排序正确,22,"[0, 673, 8, 129]","[985, 673, 36, 129]",train_final\IMG20260517094402\crops\ocr_crop_027.jpg
+23,D669.3/LH 1,D669.3/LH1,0.9508,True,green,排序正确,23,"[0, 650, 8, 158]","[1017, 650, 41, 158]",train_final\IMG20260517094402\crops\ocr_crop_010.jpg
+24,D669.3/LHB1,D669.3/LHB1,0.9972,True,green,排序正确,24,"[0, 666, 8, 152]","[1051, 666, 41, 152]",train_final\IMG20260517094402\crops\ocr_crop_026.jpg
+25,D669.3/LHJ,D669.3/LHJ,0.9958,True,green,排序正确,25,"[0, 658, 8, 141]","[1087, 658, 40, 141]",train_final\IMG20260517094402\crops\ocr_crop_015.jpg
+26,D669.3/LJ1,D669.3/LJ1,0.9956,True,green,排序正确,26,"[0, 660, 8, 158]","[1118, 660, 38, 158]",train_final\IMG20260517094402\crops\ocr_crop_022.jpg
+27,D669.3/LJ2,D669.3/LJ2,0.9669,True,green,排序正确,27,"[0, 655, 8, 162]","[1159, 655, 41, 162]",train_final\IMG20260517094402\crops\ocr_crop_017.jpg

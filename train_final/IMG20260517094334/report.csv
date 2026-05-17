@@ -1,0 +1,17 @@
+﻿actual_position,raw_text,clean_text,confidence,parse_ok,status,reason,recommended_position,red_box,crop_box,crop_path
+1,D669.3/H [inferred 1],D669.3/H1,0.8000,True,green,排序正确,1,"[0, 725, 8, 118]","[0, 725, 28, 118]",train_final\IMG20260517094334\crops\ocr_crop_006.jpg
+2,D669.3/H [inferred 1],D669.3/H1,0.8000,True,green,排序正确,2,"[0, 721, 8, 122]","[85, 721, 38, 122]",train_final\IMG20260517094334\crops\ocr_crop_003.jpg
+3,D669.3/H [inferred 1],D669.3/H1,0.8000,True,green,排序正确,3,"[0, 723, 8, 119]","[134, 723, 33, 119]",train_final\IMG20260517094334\crops\ocr_crop_005.jpg
+4,D669.3/HW,D669.3/HW,0.9956,True,green,排序正确,4,"[0, 712, 8, 132]","[230, 712, 34, 132]",train_final\IMG20260517094334\crops\ocr_crop_002.jpg
+5,D669.3/1,D669.3/1,0.9887,True,green,排序正确,5,"[0, 731, 8, 109]","[259, 731, 34, 109]",train_final\IMG20260517094334\crops\ocr_crop_010.jpg
+6,D669.3/H [inferred 1],D669.3/H1,0.8000,True,green,排序正确,6,"[0, 725, 8, 117]","[290, 725, 33, 117]",train_final\IMG20260517094334\crops\ocr_crop_007.jpg
+7,D669.3/H [inferred 1],D669.3/H1,0.8000,True,green,排序正确,7,"[0, 722, 8, 119]","[325, 722, 33, 119]",train_final\IMG20260517094334\crops\ocr_crop_004.jpg
+8,D669.3/h,D669.3/H,0.9290,True,green,排序正确,8,"[0, 736, 8, 103]","[367, 736, 35, 103]",train_final\IMG20260517094334\crops\ocr_crop_012.jpg
+9,D669.3/H,D669.3/H,0.9949,True,green,排序正确,9,"[0, 725, 8, 117]","[410, 725, 34, 117]",train_final\IMG20260517094334\crops\ocr_crop_008.jpg
+10,D669.3/1,D669.3/1,0.9836,True,green,排序正确,10,"[0, 728, 8, 113]","[451, 728, 35, 113]",train_final\IMG20260517094334\crops\ocr_crop_009.jpg
+11,D669.3/1,D669.3/1,0.9703,True,green,排序正确,11,"[0, 731, 8, 109]","[488, 731, 37, 109]",train_final\IMG20260517094334\crops\ocr_crop_011.jpg
+12,D669.3,D669.3,0.9945,True,green,排序正确,12,"[0, 744, 8, 94]","[733, 744, 36, 94]",train_final\IMG20260517094334\crops\ocr_crop_014.jpg
+13,D669,D669,0.9957,True,green,排序正确,13,"[0, 756, 8, 69]","[792, 756, 34, 69]",train_final\IMG20260517094334\crops\ocr_crop_017.jpg
+14,D669.3,D669.3,0.9363,True,green,排序正确,14,"[0, 750, 8, 85]","[937, 750, 34, 85]",train_final\IMG20260517094334\crops\ocr_crop_016.jpg
+15,D669.3,D669.3,0.9962,True,green,排序正确,15,"[0, 743, 8, 95]","[972, 743, 37, 95]",train_final\IMG20260517094334\crops\ocr_crop_013.jpg
+16,D669.3,D669.3,0.9956,True,green,排序正确,16,"[0, 744, 8, 94]","[1091, 744, 36, 94]",train_final\IMG20260517094334\crops\ocr_crop_015.jpg

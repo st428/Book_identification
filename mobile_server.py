@@ -17,7 +17,7 @@ WORKSPACE = Path(__file__).resolve().parent
 UPLOAD_DIR = WORKSPACE / "stage5_mobile_results" / "uploads"
 RESULT_DIR = WORKSPACE / "stage5_mobile_results" / "results"
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
-WEB_CACHE_VERSION = "web_calib20260513"
+WEB_CACHE_VERSION = "web_calib20260517_gapfill"
 
 app = Flask(__name__, template_folder="mobile_web", static_folder="mobile_web", static_url_path="/static")
 
@@ -116,6 +116,8 @@ def result_url(path: Path) -> str:
 
 def reorder_suggestions(result: ImageRunResult) -> list[str]:
     counts = result_counts(result)
+    if counts["total"] == 0:
+        return ["图像姿态或摆放位置较差，本次未识别书号。建议正对书架、让红色标签和书号区域完整入镜后重新拍摄。"]
     if counts["yellow"] > 0:
         return ["存在黄色不确定识别项，建议先人工确认黄色书号，再生成调架建议。"]
     if counts["red"] == 0:

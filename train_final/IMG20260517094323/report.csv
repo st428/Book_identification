@@ -1,0 +1,12 @@
+﻿actual_position,raw_text,clean_text,confidence,parse_ok,status,reason,recommended_position,red_box,crop_box,crop_path
+1,D669.3/F,D669.3/F,0.9693,True,green,排序正确,1,"[0, 744, 8, 93]","[69, 744, 34, 93]",train_final\IMG20260517094323\crops\ocr_crop_001.jpg
+2,D669.3,D669.3,0.9970,True,green,排序正确,2,"[0, 752, 8, 84]","[187, 752, 33, 84]",train_final\IMG20260517094323\crops\ocr_crop_008.jpg
+3,D669.3,D669.3,0.9957,True,green,排序正确,3,"[0, 755, 8, 80]","[219, 755, 32, 80]",train_final\IMG20260517094323\crops\ocr_crop_010.jpg
+4,D669.3/0,D669.3/0,0.9344,True,green,排序正确,4,"[0, 744, 8, 93]","[254, 744, 33, 93]",train_final\IMG20260517094323\crops\ocr_crop_002.jpg
+5,D669.3,D669.3,0.9973,True,green,排序正确,5,"[0, 751, 8, 85]","[620, 751, 34, 85]",train_final\IMG20260517094323\crops\ocr_crop_006.jpg
+6,D669.3,D669.3,0.9950,True,green,排序正确,6,"[0, 750, 8, 85]","[688, 750, 33, 85]",train_final\IMG20260517094323\crops\ocr_crop_005.jpg
+7,D669.3,D669.3,0.9950,True,green,排序正确,7,"[0, 757, 8, 78]","[766, 757, 32, 78]",train_final\IMG20260517094323\crops\ocr_crop_011.jpg
+8,D669.3,D669.3,0.9870,True,green,排序正确,8,"[0, 752, 8, 84]","[861, 752, 35, 84]",train_final\IMG20260517094323\crops\ocr_crop_009.jpg
+9,D669.3,D669.3,0.9966,True,green,排序正确,9,"[0, 751, 8, 85]","[970, 751, 35, 85]",train_final\IMG20260517094323\crops\ocr_crop_007.jpg
+10,D669.3/ 1,D669.3/1,0.0955,True,yellow,OCR 置信度较低,,"[0, 745, 8, 93]","[1004, 745, 107, 93]",train_final\IMG20260517094323\crops\ocr_crop_004.jpg
+11,D669.3,D669.3,0.9954,True,green,排序正确,10,"[0, 757, 8, 78]","[1167, 757, 33, 78]",train_final\IMG20260517094323\crops\ocr_crop_012.jpg

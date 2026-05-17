@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
 import os
 import re
 import tempfile
@@ -644,6 +645,7 @@ def normalize_ocr_text(text: str) -> str:
     match = re.search(r"[A-Z][A-Z0-9.-]*/[A-Z0-9-]+", text)
     if match:
         text = match.group(0)
+    text = re.sub(r"^R(?=[A-Z][0-9])", "", text)
 
     # Common OCR fixes in the classification-number part before '/'.
     if "/" in text:
@@ -662,6 +664,10 @@ def normalize_ocr_text(text: str) -> str:
         if decimal_match:
             cls, major, decimal = decimal_match.groups()
             left = f"{cls}{major}.{decimal}"
+        dash_decimal_match = re.fullmatch(r"([A-Z]+\d{3})-(\d)", left)
+        if dash_decimal_match:
+            cls, decimal = dash_decimal_match.groups()
+            left = f"{cls}.{decimal}"
         text = left + "/" + right
 
     return text
@@ -701,17 +707,31 @@ def call_number_order_key(value: str) -> tuple[Any, ...] | None:
     if parsed is None:
         return None
 
-    letter, number_parts, has_aux, aux_parts, suffix_parts = parsed
+    letter, number_parts, _has_aux, _aux_parts, _suffix_parts = parsed
     # Prototype sorting focuses on CLC classification order. Real shelves may not
     # keep the suffix/cutter code in strict alphabetical order, as shown by the
     # newly supplied correct samples. Auxiliary-number groups are narrower, so
     # their suffix order remains useful for catching obvious local inversions.
-    suffix_key = suffix_parts if has_aux else tuple()
-    return (letter, number_parts, has_aux, aux_parts, suffix_key)
+    number_parts = number_parts[:1]
+    return (letter, number_parts)
+
+
+def local_aux_order_key(value: str) -> tuple[tuple[Any, ...], tuple[Any, ...]] | None:
+    parsed = parse_call_number(value)
+    if parsed is None:
+        return None
+    letter, number_parts, has_aux, aux_parts, suffix_parts = parsed
+    if not has_aux:
+        return None
+    return (letter, number_parts, aux_parts), suffix_parts
 
 
 def apply_sort_status(detections: list[Detection], confidence_threshold: float) -> None:
-    parsed = [d for d in detections if d.parse_ok and d.confidence >= confidence_threshold]
+    parsed = [
+        d
+        for d in detections
+        if d.parse_ok and "/" in d.clean_text and d.confidence >= confidence_threshold
+    ]
     sorted_texts = [d.clean_text for d in sorted(parsed, key=lambda d: call_number_order_key(d.clean_text))]
 
     recommended_positions: dict[str, list[int]] = {}
@@ -735,6 +755,11 @@ def apply_sort_status(detections: list[Detection], confidence_threshold: float) 
             detection.reason = "索书号格式不符合规则"
             continue
 
+        if "/" not in detection.clean_text:
+            detection.status = "yellow"
+            detection.reason = "索书号不完整，缺少辅助号"
+            continue
+
         candidates = recommended_positions.get(detection.clean_text, [])
         cursor = used_positions.get(detection.clean_text, 0)
         recommended = candidates[cursor] if cursor < len(candidates) else None
@@ -750,6 +775,108 @@ def apply_sort_status(detections: list[Detection], confidence_threshold: float) 
         else:
             detection.status = "red"
             detection.reason = f"推荐位置应为 {recommended}"
+
+def longest_nondecreasing_indices(keys: list[tuple[Any, ...]]) -> set[int]:
+    if not keys:
+        return set()
+
+    lengths = [1] * len(keys)
+    previous = [-1] * len(keys)
+    best_index = 0
+    for i in range(len(keys)):
+        for j in range(i):
+            if keys[j] <= keys[i] and lengths[j] + 1 > lengths[i]:
+                lengths[i] = lengths[j] + 1
+                previous[i] = j
+        if lengths[i] > lengths[best_index]:
+            best_index = i
+
+    indices: set[int] = set()
+    cursor = best_index
+    while cursor != -1:
+        indices.add(cursor)
+        cursor = previous[cursor]
+    return indices
+
+
+def apply_sort_status(detections: list[Detection], confidence_threshold: float) -> None:
+    parsed = [
+        d
+        for d in detections
+        if d.parse_ok and "/" in d.clean_text and d.confidence >= confidence_threshold
+    ]
+    sorted_texts = [d.clean_text for d in sorted(parsed, key=lambda d: call_number_order_key(d.clean_text))]
+    parsed_positions = {id(detection): index for index, detection in enumerate(parsed)}
+    stable_indices = longest_nondecreasing_indices(
+        [call_number_order_key(d.clean_text) or tuple() for d in parsed]
+    )
+
+    recommended_positions: dict[str, list[int]] = {}
+    for pos, text in enumerate(sorted_texts, start=1):
+        recommended_positions.setdefault(text, []).append(pos)
+
+    used_positions: dict[str, int] = {}
+    for detection in detections:
+        detection.recommended_position = None
+
+    for actual_pos, detection in enumerate(detections, start=1):
+        if not detection.clean_text:
+            detection.status = "yellow"
+            detection.reason = "OCR 未识别到内容"
+            continue
+
+        if detection.confidence < confidence_threshold:
+            detection.status = "yellow"
+            detection.reason = "OCR 置信度较低"
+            continue
+
+        if not detection.parse_ok:
+            detection.status = "yellow"
+            detection.reason = "索书号格式不符合规则"
+            continue
+
+        if "/" not in detection.clean_text:
+            detection.status = "yellow"
+            detection.reason = "索书号不完整，缺少辅助号"
+            continue
+
+        candidates = recommended_positions.get(detection.clean_text, [])
+        cursor = used_positions.get(detection.clean_text, 0)
+        recommended = candidates[cursor] if cursor < len(candidates) else None
+        used_positions[detection.clean_text] = cursor + 1
+        detection.recommended_position = recommended
+        parsed_index = parsed_positions.get(id(detection))
+        is_stable = parsed_index is not None and parsed_index in stable_indices
+
+        if recommended is None:
+            detection.status = "yellow"
+            detection.reason = "未找到推荐位置"
+        elif is_stable:
+            detection.status = "green"
+            detection.reason = "排序正确"
+        else:
+            detection.status = "red"
+            detection.reason = f"推荐位置应为 {recommended}"
+
+    previous_aux: tuple[tuple[Any, ...], tuple[Any, ...], Detection, int] | None = None
+    for actual_pos, detection in enumerate(detections, start=1):
+        if not detection.parse_ok or detection.confidence < confidence_threshold:
+            continue
+        aux_key = local_aux_order_key(detection.clean_text)
+        if aux_key is None:
+            previous_aux = None
+            continue
+        prefix, suffix_key = aux_key
+        if previous_aux is not None:
+            previous_prefix, previous_suffix, previous_detection, previous_pos = previous_aux
+            if previous_prefix == prefix and previous_suffix > suffix_key:
+                previous_detection.status = "red"
+                previous_detection.reason = f"同一辅助号组内建议放到第 {actual_pos} 本之后"
+                previous_detection.recommended_position = actual_pos
+                detection.status = "red"
+                detection.reason = f"同一辅助号组内建议放到第 {previous_pos} 本之前"
+                detection.recommended_position = previous_pos
+        previous_aux = (prefix, suffix_key, detection, actual_pos)
 
 
 def downgrade_uncertain_sort_status(detections: list[Detection]) -> None:
@@ -899,6 +1026,7 @@ def detections_from_ocr_strip(
     order: str = "y_desc",
     allow_recovery: bool = True,
     keep_invalid: bool = True,
+    min_confidence: float = 0.0,
 ) -> list[Detection]:
     strip_x, strip_y, _, _ = strip_box
     crops_dir.mkdir(parents=True, exist_ok=True)
@@ -907,6 +1035,8 @@ def detections_from_ocr_strip(
     for candidate in build_ocr_candidates(ocr_lines, allow_recovery=allow_recovery):
         clean_text = candidate.clean_text
         if not clean_text:
+            continue
+        if candidate.confidence < min_confidence:
             continue
         parse_ok = parse_call_number(clean_text) is not None
         if not keep_invalid and not parse_ok:
@@ -945,6 +1075,127 @@ def detections_from_ocr_strip(
     for i, detection in enumerate(detections, start=1):
         detection.index = i
     return detections
+
+
+def percentile(values: list[float], q: float) -> float:
+    if not values:
+        return 0.0
+    ordered = sorted(values)
+    if len(ordered) == 1:
+        return ordered[0]
+    position = (len(ordered) - 1) * max(0.0, min(1.0, q))
+    low = int(math.floor(position))
+    high = int(math.ceil(position))
+    if low == high:
+        return ordered[low]
+    fraction = position - low
+    return ordered[low] * (1 - fraction) + ordered[high] * fraction
+
+
+def detection_iou(a: tuple[int, int, int, int], b: tuple[int, int, int, int]) -> float:
+    ax, ay, aw, ah = a
+    bx, by, bw, bh = b
+    x0 = max(ax, bx)
+    y0 = max(ay, by)
+    x1 = min(ax + aw, bx + bw)
+    y1 = min(ay + ah, by + bh)
+    inter_w = max(0, x1 - x0)
+    inter_h = max(0, y1 - y0)
+    inter = inter_w * inter_h
+    if inter <= 0:
+        return 0.0
+    union = aw * ah + bw * bh - inter
+    return inter / union if union > 0 else 0.0
+
+
+def save_detection_crop(image: np.ndarray, detection: Detection, crops_dir: Path) -> None:
+    if detection.crop_path is not None:
+        return
+    crops_dir.mkdir(parents=True, exist_ok=True)
+    x, y, w, h = detection.crop_box
+    crop = image[y : y + h, x : x + w]
+    path = crops_dir / f"ocr_crop_{detection.index:03d}.jpg"
+    write_image(path, crop)
+    detection.crop_path = path
+
+
+def densify_horizontal_detections(
+    image: np.ndarray,
+    detections: list[Detection],
+    band_box: tuple[int, int, int, int],
+    crops_dir: Path,
+) -> list[Detection]:
+    """Add yellow placeholder crops in large horizontal gaps likely to contain missed call numbers."""
+    if len(detections) < 4:
+        return detections
+
+    ordered = sorted(detections, key=lambda item: item.center_x)
+    widths = [float(item.crop_box[2]) for item in ordered if item.crop_box[2] > 0]
+    heights = [float(item.crop_box[3]) for item in ordered if item.crop_box[3] > 0]
+    if not widths or not heights:
+        return detections
+
+    median_w = median(widths)
+    median_h = median(heights)
+    if median_w <= 0 or median_h <= 0:
+        return detections
+
+    centers = [item.center_x for item in ordered]
+    gaps = [centers[i + 1] - centers[i] for i in range(len(centers) - 1) if centers[i + 1] > centers[i]]
+    if not gaps:
+        return detections
+
+    small_gap = percentile(gaps, 0.30)
+    target_spacing = small_gap if small_gap > 0 else median_w * 1.45
+    target_spacing = max(28.0, min(95.0, max(target_spacing, median_w * 1.18)))
+
+    _, band_y, _, band_h = band_box
+    # OCR often misses faint vertical call numbers. For filled gaps, crop the
+    # full lower book-label region instead of a tiny OCR line-height box.
+    crop_y0 = int(max(0, band_y + band_h * 0.42))
+    crop_y1 = int(min(image.shape[0], band_y + band_h * 0.96))
+    if crop_y1 - crop_y0 < max(36, median_h * 1.8):
+        y_values = [float(item.crop_box[1]) for item in ordered]
+        bottom_values = [float(item.crop_box[1] + item.crop_box[3]) for item in ordered]
+        crop_y0 = int(max(band_y, percentile(y_values, 0.20)))
+        crop_y1 = int(min(image.shape[0], percentile(bottom_values, 0.85)))
+
+    estimated_w = int(max(22, min(85, median_w * 1.15)))
+    inserted: list[Detection] = []
+    for left, right in zip(ordered, ordered[1:]):
+        gap = right.center_x - left.center_x
+        if gap <= target_spacing * 1.75:
+            continue
+        missing_count = int(round(gap / target_spacing)) - 1
+        missing_count = max(0, min(missing_count, 8))
+        for offset in range(1, missing_count + 1):
+            center_x = left.center_x + gap * offset / (missing_count + 1)
+            x0 = int(max(0, center_x - estimated_w / 2))
+            x1 = int(min(image.shape[1], center_x + estimated_w / 2))
+            if x1 - x0 < 18:
+                continue
+            crop_box = (x0, crop_y0, x1 - x0, crop_y1 - crop_y0)
+            if any(detection_iou(crop_box, item.crop_box) > 0.35 for item in ordered + inserted):
+                continue
+            inserted.append(
+                Detection(
+                    index=0,
+                    red_box=(x0, max(0, band_y - 4), x1 - x0, 8),
+                    crop_box=crop_box,
+                    reason="根据相邻书号间距补充的疑似漏检位置",
+                )
+            )
+
+    if not inserted:
+        return detections
+
+    combined = sorted(ordered + inserted, key=lambda item: item.center_x)
+    for index, detection in enumerate(combined, start=1):
+        detection.index = index
+        if detection in inserted:
+            detection.crop_path = None
+        save_detection_crop(image, detection, crops_dir)
+    return combined
 
 
 def build_ocr_candidates(ocr_lines: list[OcrLine], allow_recovery: bool = True) -> list[OcrCandidate]:
@@ -1243,6 +1494,41 @@ def markdown_join(values: list[str]) -> str:
     return " -> ".join(value for value in values if value) if values else "无"
 
 
+def estimate_vertical_spine_deviation(image: np.ndarray, max_side: int) -> tuple[float, float, int]:
+    working, _ = resize_to_max_side(image, max_side)
+    h, w = working.shape[:2]
+    if w < h * 1.15:
+        return 0.0, 0.0, 0
+
+    gray = cv2.cvtColor(working, cv2.COLOR_BGR2GRAY)
+    edges = cv2.Canny(gray, 70, 170)
+    lines = cv2.HoughLinesP(edges, 1, np.pi / 180, threshold=80, minLineLength=80, maxLineGap=12)
+    deviations: list[float] = []
+    if lines is None:
+        return 0.0, 0.0, 0
+
+    for line in lines[:, 0, :]:
+        x1, y1, x2, y2 = [int(value) for value in line]
+        dx = x2 - x1
+        dy = y2 - y1
+        length = math.hypot(dx, dy)
+        if length < 80:
+            continue
+        angle = math.degrees(math.atan2(dy, dx))
+        deviation = abs(abs(angle) - 90)
+        if deviation < 35:
+            deviations.append(deviation)
+
+    if len(deviations) < 60:
+        return 0.0, 0.0, len(deviations)
+    return float(np.median(deviations)), float(np.percentile(deviations, 90)), len(deviations)
+
+
+def should_skip_bad_position_image(image: np.ndarray, max_side: int) -> bool:
+    median_deviation, p90_deviation, line_count = estimate_vertical_spine_deviation(image, max_side)
+    return line_count >= 80 and median_deviation >= 8.0 and p90_deviation >= 13.0
+
+
 def format_seconds(seconds: float) -> str:
     return f"{seconds:.1f}s"
 
@@ -1445,6 +1731,19 @@ def inspect_image(
 ) -> tuple[list[Detection], str, float, Path]:
     start_time = time.perf_counter()
     original = read_image(image_path)
+    base_dir = result_dir or output_dir / image_path.stem
+    if should_skip_bad_position_image(original, max_side):
+        working, _ = resize_to_max_side(original, max_side)
+        mask = build_red_mask(working)
+        detections: list[Detection] = []
+        elapsed_seconds = time.perf_counter() - start_time
+        write_image(base_dir / "rotated.jpg", working)
+        write_image(base_dir / "red_mask.jpg", mask)
+        write_image(base_dir / "annotated.jpg", working)
+        write_report_csv(base_dir / "report.csv", detections)
+        write_summary(base_dir / "summary.json", image_path, detections, ocr is not None, elapsed_seconds, "bad_position")
+        return detections, "bad_position", elapsed_seconds, base_dir
+
     used_rotate = choose_rotation_with_ocr(original, max_side, crop_right_ratio, ocr) if rotate == "auto" else rotate
     rotated = rotate_image(original, used_rotate)
     working, _ = resize_to_max_side(rotated, max_side)
@@ -1465,7 +1764,6 @@ def inspect_image(
     for i, detection in enumerate(fallback_detections, start=1):
         detection.index = i
 
-    base_dir = result_dir or output_dir / image_path.stem
     crops_dir = base_dir / "crops"
     crop_boxes = [d.crop_box for d in fallback_detections]
     crop_paths = save_crops(working, crop_boxes, crops_dir)
@@ -1502,8 +1800,10 @@ def inspect_image(
                 order="x_asc",
                 allow_recovery=False,
                 keep_invalid=False,
+                min_confidence=0.18,
             )
             band_detections = filter_spatial_outliers(band_detections, working.shape, "x_asc")
+            band_detections = densify_horizontal_detections(working, band_detections, band_box, crops_dir)
             if valid_detection_count(band_detections) > valid_detection_count(detections):
                 detections = band_detections
 
@@ -1516,6 +1816,8 @@ def inspect_image(
         clean_text = normalize_ocr_text(raw_text)
         detection.raw_text = raw_text
         detection.clean_text = clean_text
+        if detection.reason.startswith("根据相邻书号间距"):
+            confidence = min(confidence, confidence_threshold - 0.01)
         detection.confidence = confidence
         detection.parse_ok = parse_call_number(clean_text) is not None
 
