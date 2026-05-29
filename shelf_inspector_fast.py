@@ -8,7 +8,7 @@ import os
 import re
 import tempfile
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
@@ -69,6 +69,7 @@ class ImageRunResult:
     elapsed_seconds: float = 0.0
     result_dir: Path | None = None
     from_cache: bool = False
+    warnings: list[str] = field(default_factory=list)
 
     @property
     def annotated_path(self) -> Path:
@@ -597,6 +598,16 @@ def choose_rotation_with_ocr(
     left_score = score_orientation(image, "left", max_side)
     right_score = score_orientation(image, "right", max_side)
 
+    if w >= h * 1.15:
+        working, _ = resize_to_max_side(image, max_side)
+        mask = build_red_mask(working)
+        band_box = make_horizontal_code_band_box(working.shape, mask)
+        if band_box is not None:
+            _, by, _, bh = band_box
+            band_density = float(np.count_nonzero(mask[by : by + bh, :])) / max(1, bh * working.shape[1])
+            if band_density >= 0.03:
+                return "none"
+
     if w >= h * 1.15 and none_score >= 90:
         return "none"
 
@@ -635,14 +646,13 @@ def normalize_ocr_text(text: str) -> str:
         "。": ".",
         "，": "",
         ",": "",
-        ":": "",
-        "：": "",
+        "：": ":",
     }
     for old, new in replacements.items():
         text = text.replace(old, new)
 
-    text = re.sub(r"[^A-Z0-9./-]", "", text)
-    match = re.search(r"[A-Z][A-Z0-9.-]*/[A-Z0-9-]+", text)
+    text = re.sub(r"[^A-Z0-9./:-]", "", text)
+    match = re.search(r"[A-Z][A-Z0-9.-]*/[A-Z0-9:-]+", text)
     if match:
         text = match.group(0)
     text = re.sub(r"^R(?=[A-Z][0-9])", "", text)
@@ -675,7 +685,7 @@ def normalize_ocr_text(text: str) -> str:
 
 def natural_parts(value: str) -> tuple[tuple[int, Any], ...]:
     parts: list[tuple[int, Any]] = []
-    for item in re.findall(r"\d+|[A-Z]+|-", value):
+    for item in re.findall(r"\d+|[A-Z]+|[:-]", value):
         if item.isdigit():
             parts.append((0, int(item)))
         else:
@@ -684,7 +694,7 @@ def natural_parts(value: str) -> tuple[tuple[int, Any], ...]:
 
 
 def parse_call_number(value: str) -> tuple[Any, ...] | None:
-    match = re.match(r"^([A-Z]+)([0-9]+(?:\.[0-9]+)?)(?:-([0-9]+))?(?:/([A-Z0-9-]+))?$", value)
+    match = re.match(r"^([A-Z]+)([0-9]+(?:\.[0-9]+)?)(?:-([0-9]+))?(?:/([A-Z0-9:-]+))?$", value)
     if not match:
         return None
 
@@ -700,6 +710,13 @@ def parse_call_number(value: str) -> tuple[Any, ...] | None:
         aux_parts,
         suffix_parts,
     )
+
+
+def split_call_number_suffix(value: str) -> tuple[str, str] | None:
+    if parse_call_number(value) is None or "/" not in value:
+        return None
+    prefix, suffix = value.rsplit("/", 1)
+    return f"{prefix}/", suffix
 
 
 def call_number_order_key(value: str) -> tuple[Any, ...] | None:
@@ -743,6 +760,11 @@ def apply_sort_status(detections: list[Detection], confidence_threshold: float) 
         if not detection.clean_text:
             detection.status = "yellow"
             detection.reason = "OCR 未识别到内容"
+            continue
+
+        if detection.reason.startswith("根据相邻薄书编号"):
+            detection.status = "yellow"
+            detection.reason = "根据相邻薄书编号推测，建议人工复核"
             continue
 
         if detection.confidence < confidence_threshold:
@@ -823,6 +845,11 @@ def apply_sort_status(detections: list[Detection], confidence_threshold: float) 
         if not detection.clean_text:
             detection.status = "yellow"
             detection.reason = "OCR 未识别到内容"
+            continue
+
+        if detection.reason.startswith("根据相邻薄书编号"):
+            detection.status = "yellow"
+            detection.reason = "根据相邻薄书编号推测，建议人工复核"
             continue
 
         if detection.confidence < confidence_threshold:
@@ -1003,7 +1030,7 @@ def make_horizontal_code_band_box(
             continue
         if density < 0.08:
             continue
-        if not 0.28 <= center_ratio <= 0.78:
+        if not 0.28 <= center_ratio <= 0.86:
             continue
         useful_segments.append((y0, y1, density))
 
@@ -1043,8 +1070,12 @@ def detections_from_ocr_strip(
             continue
 
         lx, ly, lw, lh = candidate.box
-        pad_x = max(8, int(lw * 0.18))
-        pad_y = max(4, int(lh * 0.35))
+        if order == "x_asc":
+            pad_x = max(3, int(lw * 0.08))
+            pad_y = max(3, int(lh * 0.16))
+        else:
+            pad_x = max(8, int(lw * 0.18))
+            pad_y = max(4, int(lh * 0.35))
         x0 = max(0, strip_x + lx - pad_x)
         y0 = max(0, strip_y + ly - pad_y)
         x1 = min(image.shape[1], strip_x + lx + lw + pad_x)
@@ -1062,19 +1093,148 @@ def detections_from_ocr_strip(
             parse_ok=parse_ok,
         )
 
-        crop = image[y0:y1, x0:x1]
-        crop_path = crops_dir / f"ocr_crop_{detection.index:03d}.jpg"
-        write_image(crop_path, crop)
-        detection.crop_path = crop_path
         detections.append(detection)
 
     if order == "x_asc":
         detections.sort(key=lambda d: d.center_x)
+        correct_horizontal_suffix_digit_bleed(detections)
+        infer_horizontal_missing_numeric_suffixes(detections)
     else:
         detections.sort(key=lambda d: d.center_y, reverse=True)
     for i, detection in enumerate(detections, start=1):
         detection.index = i
+        crop = image[
+            detection.crop_box[1] : detection.crop_box[1] + detection.crop_box[3],
+            detection.crop_box[0] : detection.crop_box[0] + detection.crop_box[2],
+        ]
+        crop_path = crops_dir / f"ocr_crop_{i:03d}.jpg"
+        write_image(crop_path, crop)
+        detection.crop_path = crop_path
     return detections
+
+
+def correct_horizontal_suffix_digit_bleed(detections: list[Detection]) -> None:
+    if len(detections) < 2:
+        return
+
+    widths = [d.crop_box[2] for d in detections if d.crop_box[2] > 0]
+    typical_w = median([float(width) for width in widths]) or 40.0
+
+    for left, right in zip(detections, detections[1:]):
+        left_parts = split_call_number_suffix(left.clean_text)
+        right_parts = split_call_number_suffix(right.clean_text)
+        if left_parts is None or right_parts is None:
+            continue
+
+        left_prefix, left_suffix = left_parts
+        right_prefix, right_suffix = right_parts
+        if left_prefix != right_prefix:
+            continue
+
+        left_match = re.fullmatch(r"([A-Z]{2,5})([1-9])", left_suffix)
+        if left_match is None or not re.fullmatch(r"[A-Z]{1,4}", right_suffix):
+            continue
+
+        left_letters, digit = left_match.groups()
+        if left_letters >= right_suffix:
+            continue
+
+        lx, ly, lw, lh = left.crop_box
+        rx, ry, rw, rh = right.crop_box
+        horizontal_gap = rx - (lx + lw)
+        vertical_gap = abs((ly + lh / 2) - (ry + rh / 2))
+        same_row = vertical_gap <= max(lh, rh) * 0.55
+        left_too_wide = lw >= max(rw * 1.15, typical_w * 1.10)
+        boxes_touch = horizontal_gap <= typical_w * 0.35
+        if not same_row or not boxes_touch or not left_too_wide:
+            continue
+
+        left.clean_text = f"{left_prefix}{left_letters}"
+        right.clean_text = f"{right_prefix}{right_suffix}{digit}"
+        left.raw_text = f"{left.raw_text} [trimmed suffix bleed]"
+        right.raw_text = f"{right.raw_text} [suffix digit from left neighbor]"
+        left.parse_ok = parse_call_number(left.clean_text) is not None
+        right.parse_ok = parse_call_number(right.clean_text) is not None
+        left.confidence = min(left.confidence, 0.92)
+        right.confidence = min(right.confidence, 0.92)
+
+        boundary = int((left.center_x + right.center_x) / 2)
+        new_left_right = max(lx + 18, min(lx + lw, boundary))
+        if new_left_right < lx + lw:
+            left.crop_box = (lx, ly, new_left_right - lx, lh)
+
+
+def suffix_stem_number(value: str) -> tuple[str, str, int] | None:
+    parts = split_call_number_suffix(value)
+    if parts is None:
+        return None
+    prefix, suffix = parts
+    match = re.fullmatch(r"([A-Z]{1,5})([1-9]\d*)", suffix)
+    if match is None:
+        return None
+    stem, number = match.groups()
+    return prefix, stem, int(number)
+
+
+def alpha_suffix_stem(value: str) -> tuple[str, str] | None:
+    parts = split_call_number_suffix(value)
+    if parts is None:
+        return None
+    prefix, suffix = parts
+    if not re.fullmatch(r"[A-Z]{1,5}", suffix):
+        return None
+    return prefix, suffix
+
+
+def set_inferred_numeric_suffix(detection: Detection, prefix: str, stem: str, number: int) -> None:
+    inferred = f"{prefix}{stem}{number}"
+    if parse_call_number(inferred) is None:
+        return
+    detection.raw_text = f"{detection.raw_text} [inferred numeric suffix {number}]"
+    detection.clean_text = inferred
+    detection.parse_ok = True
+    detection.confidence = min(detection.confidence, 0.88)
+
+
+def infer_horizontal_missing_numeric_suffixes(detections: list[Detection]) -> None:
+    if len(detections) < 3:
+        return
+
+    for index, detection in enumerate(detections):
+        alpha = alpha_suffix_stem(detection.clean_text)
+        if alpha is None:
+            continue
+        prefix, stem = alpha
+
+        if index + 2 < len(detections):
+            right_1 = suffix_stem_number(detections[index + 1].clean_text)
+            right_2 = suffix_stem_number(detections[index + 2].clean_text)
+            if (
+                right_1 is not None
+                and right_2 is not None
+                and right_1[0] == prefix
+                and right_2[0] == prefix
+                and right_1[1] == stem
+                and right_2[1] == stem
+                and right_2[2] == right_1[2] + 1
+                and right_1[2] > 1
+            ):
+                set_inferred_numeric_suffix(detection, prefix, stem, right_1[2] - 1)
+                continue
+
+        if 0 < index < len(detections) - 1:
+            left_1 = suffix_stem_number(detections[index - 1].clean_text)
+            right_1 = suffix_stem_number(detections[index + 1].clean_text)
+            if (
+                left_1 is not None
+                and right_1 is not None
+                and left_1[0] == prefix
+                and right_1[0] == prefix
+                and left_1[1] == stem
+                and right_1[1] == stem
+                and right_1[2] == left_1[2] + 2
+            ):
+                set_inferred_numeric_suffix(detection, prefix, stem, left_1[2] + 1)
 
 
 def percentile(values: list[float], q: float) -> float:
@@ -1106,6 +1266,14 @@ def detection_iou(a: tuple[int, int, int, int], b: tuple[int, int, int, int]) ->
         return 0.0
     union = aw * ah + bw * bh - inter
     return inter / union if union > 0 else 0.0
+
+
+def call_number_numeric_suffix(value: str) -> tuple[str, int] | None:
+    match = re.match(r"^(.+?)(\d+)$", value)
+    if not match:
+        return None
+    stem, number = match.groups()
+    return stem, int(number)
 
 
 def save_detection_crop(image: np.ndarray, detection: Detection, crops_dir: Path) -> None:
@@ -1150,41 +1318,118 @@ def densify_horizontal_detections(
     target_spacing = max(28.0, min(95.0, max(target_spacing, median_w * 1.18)))
 
     _, band_y, _, band_h = band_box
-    # OCR often misses faint vertical call numbers. For filled gaps, crop the
-    # full lower book-label region instead of a tiny OCR line-height box.
-    crop_y0 = int(max(0, band_y + band_h * 0.42))
-    crop_y1 = int(min(image.shape[0], band_y + band_h * 0.96))
-    if crop_y1 - crop_y0 < max(36, median_h * 1.8):
-        y_values = [float(item.crop_box[1]) for item in ordered]
-        bottom_values = [float(item.crop_box[1] + item.crop_box[3]) for item in ordered]
-        crop_y0 = int(max(band_y, percentile(y_values, 0.20)))
-        crop_y1 = int(min(image.shape[0], percentile(bottom_values, 0.85)))
+    lower_label_y = max(0, band_y - band_h * 0.18)
+    lower_label_bottom_y = band_y + band_h * 0.42
+    anchor_detections = [
+        item
+        for item in ordered
+        if item.confidence >= 0.78
+        and item.crop_box[1] >= lower_label_y
+        and item.crop_box[1] + item.crop_box[3] >= lower_label_bottom_y
+        and ("/" in item.clean_text or item.clean_text.startswith(("D66", "D669")))
+    ]
+    if len(anchor_detections) < 4:
+        anchor_detections = [
+            item
+            for item in ordered
+            if item.crop_box[1] >= lower_label_y
+            and item.crop_box[1] + item.crop_box[3] >= lower_label_bottom_y
+        ]
+    if len(anchor_detections) < 4:
+        return detections
+
+    y_values = [float(item.crop_box[1]) for item in anchor_detections]
+    bottom_values = [float(item.crop_box[1] + item.crop_box[3]) for item in anchor_detections]
+    anchor_heights = [float(item.crop_box[3]) for item in anchor_detections if item.crop_box[3] > 0]
+    typical_h = median(anchor_heights) or median_h
+    crop_y0 = int(max(0, percentile(y_values, 0.15) - 6))
+    crop_y1 = int(min(image.shape[0], percentile(bottom_values, 0.85) + 6))
+
+    max_h = max(80, int(typical_h * 1.45))
+    min_h = max(45, int(typical_h * 0.75))
+    if crop_y1 - crop_y0 > max_h:
+        center_y = int(median([item.crop_box[1] + item.crop_box[3] / 2 for item in anchor_detections]))
+        crop_y0 = max(0, center_y - max_h // 2)
+        crop_y1 = min(image.shape[0], crop_y0 + max_h)
+    if crop_y1 - crop_y0 < min_h:
+        center_y = (crop_y0 + crop_y1) // 2
+        crop_y0 = max(0, center_y - min_h // 2)
+        crop_y1 = min(image.shape[0], crop_y0 + min_h)
 
     estimated_w = int(max(22, min(85, median_w * 1.15)))
     inserted: list[Detection] = []
+
+    red_mask = build_red_mask(image)
+
+    def has_red_label_support(x0: int, x1: int) -> bool:
+        rx0 = max(0, min(image.shape[1] - 1, x0))
+        rx1 = max(0, min(image.shape[1], x1))
+        if rx1 <= rx0:
+            return False
+        ry0 = max(0, min(image.shape[0] - 1, band_y))
+        ry1 = max(0, min(image.shape[0], band_y + band_h))
+        if ry1 <= ry0:
+            return False
+        label_region = red_mask[ry0:ry1, rx0:rx1]
+        return np.count_nonzero(label_region) > max(8, int(label_region.size * 0.01))
+
+    def append_gap_candidate(center_x: float, candidate_w: int | None = None, inferred_text: str = "") -> None:
+        box_w = candidate_w or estimated_w
+        x0 = int(max(0, center_x - estimated_w / 2))
+        if candidate_w is not None:
+            x0 = int(max(0, center_x - box_w / 2))
+        x1 = int(min(image.shape[1], center_x + box_w / 2))
+        if x1 - x0 < 18:
+            return
+        if not has_red_label_support(x0, x1):
+            return
+        crop_box = (x0, crop_y0, x1 - x0, crop_y1 - crop_y0)
+        if any(detection_iou(crop_box, item.crop_box) > 0.35 for item in ordered + inserted):
+            return
+        inserted.append(
+            Detection(
+                index=0,
+                red_box=(x0, crop_y0, 1, crop_y1 - crop_y0),
+                crop_box=crop_box,
+                raw_text=inferred_text,
+                clean_text=inferred_text,
+                parse_ok=parse_call_number(inferred_text) is not None if inferred_text else False,
+                reason="根据相邻薄书编号补充的疑似漏检位置" if inferred_text else "根据相邻书号间距补充的疑似漏检位置",
+            )
+        )
+
+    first = ordered[0]
+    leading_missing_count = int(round(first.center_x / target_spacing)) - 1
+    leading_missing_count = max(0, min(leading_missing_count, 3))
+    for offset in range(leading_missing_count, 0, -1):
+        append_gap_candidate(first.center_x - target_spacing * offset)
+
     for left, right in zip(ordered, ordered[1:]):
         gap = right.center_x - left.center_x
+        left_x, _, left_w, _ = left.crop_box
+        right_x, _, _, _ = right.crop_box
+        free_gap = right_x - (left_x + left_w)
+        left_suffix = call_number_numeric_suffix(left.clean_text)
+        right_suffix = call_number_numeric_suffix(right.clean_text)
+        if (
+            gap > median_w * 1.25
+            and free_gap > max(12.0, median_w * 0.60)
+            and left_suffix is not None
+            and right_suffix is not None
+            and left_suffix[0] == right_suffix[0]
+            and 1 < right_suffix[1] - left_suffix[1] <= 4
+        ):
+            thin_w = int(max(18, min(estimated_w * 0.72, free_gap + median_w * 0.35)))
+            inferred_text = f"{right_suffix[0]}{right_suffix[1] - 1}"
+            append_gap_candidate((left_x + left_w + right_x) / 2, thin_w, inferred_text)
+
         if gap <= target_spacing * 1.75:
             continue
         missing_count = int(round(gap / target_spacing)) - 1
         missing_count = max(0, min(missing_count, 8))
         for offset in range(1, missing_count + 1):
             center_x = left.center_x + gap * offset / (missing_count + 1)
-            x0 = int(max(0, center_x - estimated_w / 2))
-            x1 = int(min(image.shape[1], center_x + estimated_w / 2))
-            if x1 - x0 < 18:
-                continue
-            crop_box = (x0, crop_y0, x1 - x0, crop_y1 - crop_y0)
-            if any(detection_iou(crop_box, item.crop_box) > 0.35 for item in ordered + inserted):
-                continue
-            inserted.append(
-                Detection(
-                    index=0,
-                    red_box=(x0, max(0, band_y - 4), x1 - x0, 8),
-                    crop_box=crop_box,
-                    reason="根据相邻书号间距补充的疑似漏检位置",
-                )
-            )
+            append_gap_candidate(center_x)
 
     if not inserted:
         return detections
@@ -1324,6 +1569,26 @@ def valid_detection_count(detections: list[Detection]) -> int:
     return sum(1 for detection in detections if detection.parse_ok)
 
 
+def prune_unread_gapfill_detections(detections: list[Detection], image_width: int) -> list[Detection]:
+    if not detections:
+        return detections
+
+    pruned: list[Detection] = []
+    for detection in detections:
+        is_gapfill = detection.reason.startswith("根据相邻书号间距")
+        is_left_boundary = detection.center_x <= image_width * 0.08
+        if is_gapfill and not is_left_boundary and parse_call_number(detection.clean_text) is None:
+            continue
+        pruned.append(detection)
+
+    if len(pruned) == len(detections):
+        return detections
+
+    for index, detection in enumerate(pruned, start=1):
+        detection.index = index
+    return pruned
+
+
 def median(values: list[float]) -> float:
     if not values:
         return 0.0
@@ -1460,6 +1725,7 @@ def write_summary(
     ocr_enabled: bool,
     elapsed_seconds: float = 0.0,
     rotate_mode: str = "",
+    warnings: list[str] | None = None,
 ) -> None:
     counts = {"green": 0, "yellow": 0, "red": 0}
     for detection in detections:
@@ -1477,6 +1743,7 @@ def write_summary(
         "yellow": counts.get("yellow", 0),
         "red": counts.get("red", 0),
         "elapsed_seconds": round(elapsed_seconds, 3),
+        "warnings": warnings or [],
         "actual_order": [d.clean_text for d in detections],
         "recommended_order": recommended,
     }
@@ -1527,6 +1794,48 @@ def estimate_vertical_spine_deviation(image: np.ndarray, max_side: int) -> tuple
 def should_skip_bad_position_image(image: np.ndarray, max_side: int) -> bool:
     median_deviation, p90_deviation, line_count = estimate_vertical_spine_deviation(image, max_side)
     return line_count >= 80 and median_deviation >= 8.0 and p90_deviation >= 13.0
+
+
+def evaluate_pose_warnings(
+    image: np.ndarray,
+    mask: np.ndarray,
+    detections: list[Detection],
+    rotate_mode: str,
+    max_side: int,
+) -> list[str]:
+    warnings: list[str] = []
+    if rotate_mode != "none":
+        return warnings
+
+    h, w = image.shape[:2]
+    if h <= 0 or w <= 0:
+        return warnings
+
+    meaningful = [item for item in detections if item.clean_text or item.parse_ok]
+    if len(meaningful) >= 8:
+        right_edge = max(item.crop_box[0] + item.crop_box[2] for item in meaningful)
+        band_box = make_horizontal_code_band_box(image.shape, mask)
+        right_still_has_red = False
+        if band_box is not None:
+            _, by, _, bh = band_box
+            x0 = min(w - 1, max(0, int(right_edge + w * 0.02)))
+            x1 = min(w, int(w * 0.98))
+            if x1 > x0:
+                red_tail = mask[by : by + bh, x0:x1]
+                right_still_has_red = np.count_nonzero(red_tail) > max(20, red_tail.size * 0.003)
+
+        if right_edge < w * 0.82 and right_still_has_red:
+            warnings.append(
+                "右侧仍有红色标签但识别框提前结束，可能受拍摄角度或透视影响漏识别右侧书籍；建议正对书架重拍，必要时用精细模式复核。"
+            )
+
+    median_deviation, p90_deviation, line_count = estimate_vertical_spine_deviation(image, max_side)
+    if not warnings and line_count >= 80 and (median_deviation >= 3.0 or p90_deviation >= 7.0):
+        warnings.append(
+            "检测到画面有轻微倾斜，当前结果可参考；若右侧或边缘书籍漏识别，建议让手机尽量平行书架后重拍。"
+        )
+
+    return warnings
 
 
 def format_seconds(seconds: float) -> str:
@@ -1621,6 +1930,7 @@ def load_cached_result(image_path: Path, output_dir: Path, output_variant: str |
         elapsed_seconds=float(data.get("elapsed_seconds") or 0.0),
         result_dir=result_dir,
         from_cache=True,
+        warnings=[str(item) for item in data.get("warnings") or [] if item],
     )
 
 
@@ -1728,7 +2038,7 @@ def inspect_image(
     ocr_mode: str,
     confidence_threshold: float,
     ocr: Any | None = None,
-) -> tuple[list[Detection], str, float, Path]:
+) -> tuple[list[Detection], str, float, Path, list[str]]:
     start_time = time.perf_counter()
     original = read_image(image_path)
     base_dir = result_dir or output_dir / image_path.stem
@@ -1741,8 +2051,17 @@ def inspect_image(
         write_image(base_dir / "red_mask.jpg", mask)
         write_image(base_dir / "annotated.jpg", working)
         write_report_csv(base_dir / "report.csv", detections)
-        write_summary(base_dir / "summary.json", image_path, detections, ocr is not None, elapsed_seconds, "bad_position")
-        return detections, "bad_position", elapsed_seconds, base_dir
+        warnings = ["图像姿态或摆放位置较差，本次未识别书号。建议正对书架、让红色标签和书号区域完整入镜后重新拍摄。"]
+        write_summary(
+            base_dir / "summary.json",
+            image_path,
+            detections,
+            ocr is not None,
+            elapsed_seconds,
+            "bad_position",
+            warnings,
+        )
+        return detections, "bad_position", elapsed_seconds, base_dir, warnings
 
     used_rotate = choose_rotation_with_ocr(original, max_side, crop_right_ratio, ocr) if rotate == "auto" else rotate
     rotated = rotate_image(original, used_rotate)
@@ -1771,8 +2090,9 @@ def inspect_image(
         detection.crop_path = crop_path
 
     detections = fallback_detections
+    horizontal_band_box = make_horizontal_code_band_box(working.shape, mask) if used_rotate == "none" else None
     strip_box = make_code_strip_box(working.shape, red_column, crop_right_ratio)
-    if strip_box is not None:
+    if strip_box is not None and horizontal_band_box is None:
         sx, sy, sw, sh = strip_box
         strip = working[sy : sy + sh, sx : sx + sw]
         strip_path = base_dir / "code_strip.jpg"
@@ -1785,7 +2105,7 @@ def inspect_image(
                 detections = strip_detections
 
     if used_rotate == "none" and ocr is not None:
-        band_box = make_horizontal_code_band_box(working.shape, mask) or make_bottom_code_band_box(working.shape)
+        band_box = horizontal_band_box or make_bottom_code_band_box(working.shape)
         if band_box is not None:
             bx, by, bw, bh = band_box
             band = working[by : by + bh, bx : bx + bw]
@@ -1804,7 +2124,11 @@ def inspect_image(
             )
             band_detections = filter_spatial_outliers(band_detections, working.shape, "x_asc")
             band_detections = densify_horizontal_detections(working, band_detections, band_box, crops_dir)
-            if valid_detection_count(band_detections) > valid_detection_count(detections):
+            band_valid_count = valid_detection_count(band_detections)
+            current_valid_count = valid_detection_count(detections)
+            if band_valid_count > current_valid_count or (
+                band_valid_count == current_valid_count and len(band_detections) > len(detections)
+            ):
                 detections = band_detections
 
     for detection in detections:
@@ -1821,20 +2145,22 @@ def inspect_image(
         detection.confidence = confidence
         detection.parse_ok = parse_call_number(clean_text) is not None
 
+    detections = prune_unread_gapfill_detections(detections, working.shape[1])
     apply_sort_status(detections, confidence_threshold)
     if remove_boundary_order_outliers(detections):
         apply_sort_status(detections, confidence_threshold)
     downgrade_uncertain_sort_status(detections)
 
+    warnings = evaluate_pose_warnings(working, mask, detections, used_rotate, max_side)
     annotated = annotate_image(working, detections)
     elapsed_seconds = time.perf_counter() - start_time
     write_image(base_dir / "rotated.jpg", working)
     write_image(base_dir / "red_mask.jpg", mask)
     write_image(base_dir / "annotated.jpg", annotated)
     write_report_csv(base_dir / "report.csv", detections)
-    write_summary(base_dir / "summary.json", image_path, detections, ocr is not None, elapsed_seconds, used_rotate)
+    write_summary(base_dir / "summary.json", image_path, detections, ocr is not None, elapsed_seconds, used_rotate, warnings)
 
-    return detections, used_rotate, elapsed_seconds, base_dir
+    return detections, used_rotate, elapsed_seconds, base_dir, warnings
 
 
 def collect_images(input_paths: list[Path]) -> list[Path]:
@@ -1923,7 +2249,7 @@ def run_inspection(
                     progress("image_cached", cached)
                 continue
 
-        detections, used_rotate, elapsed_seconds, actual_result_dir = inspect_image(
+        detections, used_rotate, elapsed_seconds, actual_result_dir, warnings = inspect_image(
             image_path=image_path,
             output_dir=output_dir,
             result_dir=result_dir,
@@ -1943,6 +2269,7 @@ def run_inspection(
             rotate_mode=used_rotate,
             elapsed_seconds=elapsed_seconds,
             result_dir=actual_result_dir,
+            warnings=warnings,
         )
         results.append(result)
         if progress is not None:

@@ -1,0 +1,36 @@
+# Python runtime caches
+__pycache__/
+*.py[cod]
+
+# Local OCR/runtime logs
+*.log
+*.tmp
+
+# Generated web/mobile processing cache
+stage5_mobile_results/uploads/
+stage5_mobile_results/results/
+stage5_mobile_results/results_*/
+stage5_mobile_results/*_image_paths.txt
+
+# Recognition dataset exports, review packages, training outputs and evals
+stage5_mobile_results/rec_label_export*/
+stage5_mobile_results/rec_train*/
+stage5_mobile_results/rec_training_output*/
+stage5_mobile_results/rec_eval*/
+stage5_mobile_results/training_data/
+
+# New photo batches are organized locally before being exported.
+traindata/newdata/
+traindata/double_data/
+
+# Paddle/PaddleOCR model artifacts
+*.pdparams
+*.pdopt
+*.pdstates
+*.pdiparams
+*.pdmodel
+*.onnx
+
+# Local OS/editor noise
+.DS_Store
+Thumbs.db

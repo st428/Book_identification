@@ -17,7 +17,7 @@ WORKSPACE = Path(__file__).resolve().parent
 UPLOAD_DIR = WORKSPACE / "stage5_mobile_results" / "uploads"
 RESULT_DIR = WORKSPACE / "stage5_mobile_results" / "results"
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
-WEB_CACHE_VERSION = "web_calib20260517_gapfill"
+WEB_CACHE_VERSION = "web_calib20260523_suffix_bleed_sequence"
 
 app = Flask(__name__, template_folder="mobile_web", static_folder="mobile_web", static_url_path="/static")
 
@@ -169,6 +169,7 @@ def serialize_result(result: ImageRunResult, original_name: str) -> dict[str, ob
         "elapsed_seconds": round(result.elapsed_seconds, 1),
         "from_cache": result.from_cache,
         "counts": result_counts(result),
+        "warnings": result.warnings,
         "annotated_url": result_url(result.annotated_path),
         "actual_order": [item.clean_text or "UNREAD" for item in result.detections],
         "order_items": [

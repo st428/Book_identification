@@ -56,6 +56,7 @@
         <div><strong class="red-count">0</strong><span>红色</span></div>
       </div>
       <p class="meta item-meta"></p>
+      <ul class="warning-list hidden"></ul>
       <img class="annotated-image" alt="识别标注图">
       <section class="suggestion-box">
         <h4>调架建议</h4>
@@ -141,6 +142,14 @@
       node.querySelector(".red-count").textContent = item.counts.red;
       node.querySelector(".item-meta").textContent = `方向：${item.rotate || "auto"}，耗时：${item.elapsed_seconds}s`;
       node.querySelector(".annotated-image").src = item.annotated_url + "?t=" + Date.now();
+
+      const warningList = node.querySelector(".warning-list");
+      (item.warnings || []).forEach((text) => {
+        const li = document.createElement("li");
+        li.textContent = text;
+        warningList.appendChild(li);
+      });
+      warningList.classList.toggle("hidden", warningList.children.length === 0);
 
       const suggestionList = node.querySelector(".suggestion-list");
       item.suggestions.forEach((text) => {

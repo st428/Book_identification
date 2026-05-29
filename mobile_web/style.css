@@ -209,6 +209,15 @@ select:disabled {
   border: 1px solid var(--line);
 }
 
+.warning-list {
+  margin: 12px 0 0;
+  padding: 10px 12px 10px 30px;
+  border: 1px solid rgba(196, 138, 0, 0.28);
+  border-radius: 14px;
+  color: #765300;
+  background: #fff4cf;
+}
+
 .suggestion-box {
   margin-top: 14px;
   padding: 14px;
