@@ -1,37 +1,52 @@
-# 图书馆书架智能巡检 Web 版使用说明
+# Web 版使用说明
 
-## 启动方式
+本文件夹是最终官方 OCR 稳定版。
 
-双击 `启动Web端.exe`，程序会启动本机 Web 服务，并自动打开电脑浏览器：
+## 启动
+
+双击：
+
+```text
+启动Web端.exe
+```
+
+或在命令行运行：
+
+```powershell
+cd D:\个人\university\2026spring\lib\final
+python mobile_server.py
+```
+
+启动后打开：
 
 ```text
 http://127.0.0.1:5000
 ```
 
-如果要用手机访问，请确保手机和电脑连接同一个 Wi-Fi，然后查看启动窗口中显示的“手机访问”地址。
+手机访问时使用启动日志中显示的局域网地址，并确保手机和电脑连接同一网络。
 
-## 使用方法
+## 模式
 
-1. 在网页中选择或拍摄书架图片。
-2. 如果手机一次只能选一张，可以连续点击选择图片，页面会累计到同一批任务中。
-3. 选择快速、标准或精细模式。
-4. 点击“开始识别”。
-5. 查看标注图、识别顺序和调架建议。
+- 普通模式：默认模式，速度优先，适合日常识别。
+- 精细模式：较慢，会对可疑 crop 进行重试，适合黄色较多或 OCR 失败的图片。
 
-## 运行依赖
+当前参数：
 
-请先在当前 Python 环境安装依赖：
+- 普通模式：`max_side=1200`
+- 精细模式：`max_side=1600`，开启 crop retry
+
+## OCR 策略
+
+Web 端固定使用官方 PaddleOCR mobile OCR，不读取 `BOOK_OCR_REC_MODEL_DIR`，不会误接入训练模型。
+
+当前缓存版本：
 
 ```text
-pip install -r requirements.txt
+web_official_ocr_stable_20260608_v5
 ```
 
-如果 PaddleOCR 已经在原项目环境中安装过，一般不需要重复安装。
+## 使用建议
 
-## 文件说明
-
-- `启动Web端.exe`：双击启动 Web 版。
-- `mobile_server.py`：Web 后端服务。
-- `mobile_web/`：手机端网页界面。
-- `shelf_inspector_fast.py`：提速版识别核心。
-- `requirements.txt`：Python 依赖列表。
+- 日常先用普通模式。
+- 黄色较多、crop 可疑或 OCR 失败时，再用精细模式。
+- 如果系统提示图像姿态较差，应优先重新拍摄，而不是反复切换模式。

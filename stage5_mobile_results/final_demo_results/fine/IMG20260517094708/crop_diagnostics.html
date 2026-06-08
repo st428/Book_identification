@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Crop diagnostics - IMG20260517094708.jpg</title>
+  <style>
+    :root { --ink:#17201b; --muted:#68736c; --line:#d9e0dc; --paper:#f7faf8; --panel:#fff; --green:#157348; --yellow:#9b6500; --red:#b73535; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:"Microsoft YaHei","Segoe UI",Arial,sans-serif; color:var(--ink); background:var(--paper); }
+    header { position:sticky; top:0; z-index:2; padding:14px 18px; border-bottom:1px solid var(--line); background:rgba(247,250,248,.96); }
+    h1 { margin:0 0 4px; font-size:20px; }
+    .meta, figcaption, .box { color:var(--muted); font-size:12px; }
+    .overview { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:12px; padding:16px 18px; }
+    figure { margin:0; }
+    figure img { width:100%; max-height:420px; object-fit:contain; border:1px solid var(--line); background:white; }
+    .warnings { margin:0 18px 14px; padding:10px 18px; border:1px solid var(--line); background:white; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(360px,1fr)); gap:14px; padding:0 18px 22px; }
+    .det { border:1px solid var(--line); border-radius:8px; background:var(--panel); overflow:hidden; }
+    .det.green { border-color:rgba(21,115,72,.45); }
+    .det.yellow { border-color:rgba(155,101,0,.65); }
+    .det.red { border-color:rgba(183,53,53,.72); }
+    .det-head { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 12px; border-bottom:1px solid var(--line); }
+    .det h2 { margin:0; font-size:16px; word-break:break-all; }
+    .status { font-weight:800; }
+    .green .status { color:var(--green); } .yellow .status { color:var(--yellow); } .red .status { color:var(--red); }
+    .det-main { display:grid; grid-template-columns:150px 1fr; gap:10px; padding:10px 12px; }
+    .selected-img { display:block; width:150px; height:190px; object-fit:contain; border:1px solid var(--line); background:white; }
+    dl { display:grid; grid-template-columns:86px 1fr; gap:4px 8px; margin:0; font-size:13px; }
+    dt { color:var(--muted); } dd { margin:0; word-break:break-all; }
+    .mono { font-family:Consolas,"SFMono-Regular",monospace; }
+    .missing-img { display:grid; place-items:center; width:150px; height:190px; border:1px dashed var(--line); color:var(--muted); background:#fafafa; }
+    @media (max-width:640px) { .grid { grid-template-columns:1fr; padding:0 10px 18px; } .overview { padding:12px 10px; } .det-main { grid-template-columns:1fr; } .selected-img,.missing-img { width:100%; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Crop diagnostics</h1>
+    <div class="meta">IMG20260517094708.jpg | detections 0 | generated 2026-06-08 19:29:36</div>
+  </header>
+  <section class="overview"><figure><a href="annotated.jpg"><img src="annotated.jpg" alt="annotated"></a><figcaption>annotated</figcaption></figure><figure><a href="rotated.jpg"><img src="rotated.jpg" alt="rotated"></a><figcaption>rotated</figcaption></figure></section>
+  <ul class="warnings"><li>图像距离、倾斜或清晰度不适合可靠识别，本次未识别书号。建议靠近书架并让手机尽量平行书架后重新拍摄。</li></ul>
+  <main class="grid"></main>
+</body>
+</html>

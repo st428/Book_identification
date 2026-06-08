@@ -1,0 +1,15 @@
+{
+  "image": "data\\traindata_original\\IMG20260517094708.jpg",
+  "ocr_enabled": true,
+  "rotate_mode": "bad_position",
+  "total_detected": 0,
+  "green": 0,
+  "yellow": 0,
+  "red": 0,
+  "elapsed_seconds": 0.354,
+  "warnings": [
+    "图像距离、倾斜或清晰度不适合可靠识别，本次未识别书号。建议靠近书架并让手机尽量平行书架后重新拍摄。"
+  ],
+  "actual_order": [],
+  "recommended_order": []
+}

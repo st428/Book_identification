@@ -3,41 +3,55 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>书架智能巡检移动端</title>
+  <title>书架智能巡检</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
   <main class="page">
-    <section class="hero">
-      <p class="eyebrow">Library Shelf Inspector</p>
-      <h1>拍照识别书架索书号</h1>
-      <p class="subtitle">手机拍照或批量选择图片，电脑端调用提速版 OCR 完成识别、排序检测和调架建议。</p>
-      <div id="ocrStatus" class="status">OCR 状态：检查中...</div>
-    </section>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Library Shelf Inspector</p>
+        <h1>书架智能巡检</h1>
+      </div>
+      <div id="ocrStatus" class="status">OCR：检查中</div>
+    </header>
 
-    <section class="card">
-      <label class="field-label" for="imageInput">选择或拍摄书架图片</label>
-      <input id="imageInput" type="file" accept="image/*" multiple>
-      <p id="fileSummary" class="hint">可一次选择多张图片；如果手机一次只能选一张，可以连续选择多次再开始识别。</p>
-      <button id="clearFilesButton" class="secondary-button" type="button">清空已选图片</button>
-
-      <label class="field-label" for="modeSelect">处理模式</label>
-      <select id="modeSelect">
-        <option value="standard" selected>标准模式（推荐）</option>
-        <option value="fast">快速模式</option>
-        <option value="fine">精细模式</option>
-      </select>
-
-      <button id="submitButton" type="button">开始识别</button>
-      <p id="message" class="message">请选择图片后开始识别。</p>
-    </section>
-
-    <section id="resultCard" class="card result hidden">
-      <div class="result-header">
-        <div>
-          <h2>识别结果</h2>
-          <p id="batchMeta" class="meta"></p>
+    <section class="upload-panel" aria-label="上传图片">
+      <div class="field">
+        <label class="field-label" for="imageInput">图片</label>
+        <div class="file-picker">
+          <input id="imageInput" class="file-input" type="file" accept="image/*" multiple>
+          <label class="file-button" for="imageInput">选择文件</label>
+          <span id="filePickerText" class="file-picker-text">未选择文件</span>
         </div>
+        <p id="fileSummary" class="hint">未选择图片</p>
+      </div>
+
+      <div class="field">
+        <span class="field-label">模式</span>
+        <div class="mode-control" role="radiogroup" aria-label="处理模式">
+          <label>
+            <input type="radio" name="mode" value="standard" checked>
+            <span>普通</span>
+          </label>
+          <label>
+            <input type="radio" name="mode" value="fine">
+            <span>精细</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button id="submitButton" type="button">开始识别</button>
+        <button id="clearFilesButton" class="secondary-button" type="button">清空</button>
+      </div>
+      <p id="message" class="message">使用官方 OCR 稳定版。</p>
+    </section>
+
+    <section id="resultPanel" class="result-panel hidden" aria-label="识别结果">
+      <div class="result-header">
+        <h2>识别结果</h2>
+        <p id="batchMeta" class="meta"></p>
       </div>
       <div id="resultsList" class="results-list"></div>
     </section>
@@ -50,20 +64,23 @@
         <span class="cache-pill"></span>
       </div>
       <div class="stats">
-        <div><strong class="total-count">0</strong><span>检测数</span></div>
-        <div><strong class="green-count">0</strong><span>绿色</span></div>
-        <div><strong class="yellow-count">0</strong><span>黄色</span></div>
-        <div><strong class="red-count">0</strong><span>红色</span></div>
+        <div><strong class="total-count">0</strong><span>检测</span></div>
+        <div><strong class="green-count">0</strong><span>绿</span></div>
+        <div><strong class="yellow-count">0</strong><span>黄</span></div>
+        <div><strong class="red-count">0</strong><span>红</span></div>
       </div>
       <p class="meta item-meta"></p>
       <ul class="warning-list hidden"></ul>
       <img class="annotated-image" alt="识别标注图">
+      <div class="link-row">
+        <a class="diagnostics-link hidden" target="_blank" rel="noopener">crop 诊断</a>
+      </div>
       <section class="suggestion-box">
         <h4>调架建议</h4>
         <ul class="suggestion-list"></ul>
       </section>
       <details>
-        <summary>查看识别顺序</summary>
+        <summary>识别顺序</summary>
         <ol class="order-list"></ol>
       </details>
     </article>
@@ -71,30 +88,35 @@
 
   <script>
     const imageInput = document.querySelector("#imageInput");
-    const modeSelect = document.querySelector("#modeSelect");
     const submitButton = document.querySelector("#submitButton");
     const clearFilesButton = document.querySelector("#clearFilesButton");
     const message = document.querySelector("#message");
-    const resultCard = document.querySelector("#resultCard");
+    const resultPanel = document.querySelector("#resultPanel");
     const ocrStatus = document.querySelector("#ocrStatus");
+    const filePickerText = document.querySelector("#filePickerText");
     const fileSummary = document.querySelector("#fileSummary");
     const batchMeta = document.querySelector("#batchMeta");
     const resultsList = document.querySelector("#resultsList");
     const resultTemplate = document.querySelector("#resultTemplate");
     let selectedFiles = [];
 
+    function selectedMode() {
+      return document.querySelector("input[name='mode']:checked")?.value || "standard";
+    }
+
     async function refreshStatus() {
       try {
         const response = await fetch("/api/status");
         const data = await response.json();
         const labels = {
-          loaded: "OCR 状态：已加载",
-          loading: "OCR 状态：加载中",
-          not_loaded: "OCR 状态：未加载"
+          loaded: "OCR：已加载",
+          loading: "OCR：加载中",
+          not_loaded: "OCR：未加载"
         };
-        ocrStatus.textContent = labels[data.ocr_status] || "OCR 状态：未知";
+        const model = data.ocr_model ? ` · ${data.ocr_model}` : "";
+        ocrStatus.textContent = `${labels[data.ocr_status] || "OCR：未知"}${model}`;
       } catch {
-        ocrStatus.textContent = "OCR 状态：无法连接服务";
+        ocrStatus.textContent = "OCR：服务未连接";
       }
     }
 
@@ -107,12 +129,14 @@
     function updateFileSummary() {
       const count = selectedFiles.length;
       if (count === 0) {
-        fileSummary.textContent = "可一次选择多张图片；如果手机一次只能选一张，可以连续选择多次再开始识别。";
-      } else {
-        const names = selectedFiles.slice(0, 3).map((file) => file.name).join("、");
-        const suffix = count > 3 ? ` 等 ${count} 张` : ` 共 ${count} 张`;
-        fileSummary.textContent = `已选择：${names}${suffix}。`;
+        filePickerText.textContent = "未选择文件";
+        fileSummary.textContent = "未选择图片";
+        return;
       }
+      filePickerText.textContent = `已选择 ${count} 张`;
+      const names = selectedFiles.slice(0, 3).map((file) => file.name).join("、");
+      const suffix = count > 3 ? ` 等 ${count} 张` : ` 共 ${count} 张`;
+      fileSummary.textContent = `${names}${suffix}`;
     }
 
     function fileKey(file) {
@@ -134,14 +158,20 @@
     function renderResult(item) {
       const node = resultTemplate.content.firstElementChild.cloneNode(true);
       node.querySelector(".image-name").textContent = item.image;
-      node.querySelector(".cache-pill").textContent = item.from_cache ? "已用缓存" : "新识别";
+      node.querySelector(".cache-pill").textContent = item.from_cache ? "缓存" : "新识别";
       node.querySelector(".cache-pill").classList.toggle("cached", item.from_cache);
       node.querySelector(".total-count").textContent = item.counts.total;
       node.querySelector(".green-count").textContent = item.counts.green;
       node.querySelector(".yellow-count").textContent = item.counts.yellow;
       node.querySelector(".red-count").textContent = item.counts.red;
       node.querySelector(".item-meta").textContent = `方向：${item.rotate || "auto"}，耗时：${item.elapsed_seconds}s`;
-      node.querySelector(".annotated-image").src = item.annotated_url + "?t=" + Date.now();
+      node.querySelector(".annotated-image").src = `${item.annotated_url}?t=${Date.now()}`;
+
+      const diagnosticsLink = node.querySelector(".diagnostics-link");
+      if (item.diagnostics_url) {
+        diagnosticsLink.href = item.diagnostics_url;
+        diagnosticsLink.classList.remove("hidden");
+      }
 
       const warningList = node.querySelector(".warning-list");
       (item.warnings || []).forEach((text) => {
@@ -152,7 +182,7 @@
       warningList.classList.toggle("hidden", warningList.children.length === 0);
 
       const suggestionList = node.querySelector(".suggestion-list");
-      item.suggestions.forEach((text) => {
+      (item.suggestions || []).forEach((text) => {
         const li = document.createElement("li");
         li.textContent = text;
         suggestionList.appendChild(li);
@@ -162,12 +192,31 @@
       const orderItems = item.order_items || item.actual_order.map((text) => ({ text, status_label: "未知" }));
       orderItems.forEach((entry) => {
         const li = document.createElement("li");
-        li.textContent = `${entry.text}（${entry.status_label}）`;
         li.className = `order-${entry.status || "unknown"}`;
+        const main = document.createElement("div");
+        main.className = "order-main";
+        main.textContent = `${entry.text}（${entry.status_label || ""}）`;
+        const detail = document.createElement("div");
+        detail.className = "order-detail";
+        const conf = Number.isFinite(entry.confidence) ? `置信度 ${entry.confidence}` : "";
+        detail.textContent = [entry.review_label, entry.train_use, conf, entry.reason || entry.review_note]
+          .filter(Boolean)
+          .join(" · ");
+        li.appendChild(main);
+        li.appendChild(detail);
         orderList.appendChild(li);
       });
 
       resultsList.appendChild(node);
+    }
+
+    function setBusy(busy) {
+      submitButton.disabled = busy;
+      clearFilesButton.disabled = busy;
+      imageInput.disabled = busy;
+      document.querySelectorAll("input[name='mode']").forEach((input) => {
+        input.disabled = busy;
+      });
     }
 
     submitButton.addEventListener("click", async () => {
@@ -179,14 +228,11 @@
 
       const formData = new FormData();
       files.forEach((file) => formData.append("images", file));
-      formData.append("mode", modeSelect.value);
+      formData.append("mode", selectedMode());
 
-      submitButton.disabled = true;
-      clearFilesButton.disabled = true;
-      modeSelect.disabled = true;
-      imageInput.disabled = true;
-      message.textContent = `正在上传并识别 ${files.length} 张图片，请稍等...`;
-      resultCard.classList.add("hidden");
+      setBusy(true);
+      message.textContent = `正在识别 ${files.length} 张图片...`;
+      resultPanel.classList.add("hidden");
       resultsList.innerHTML = "";
 
       try {
@@ -196,19 +242,15 @@
           throw new Error(data.error || "识别失败");
         }
 
-        batchMeta.textContent = `模式：${data.mode}，共 ${data.total} 张，其中 ${data.cached} 张使用缓存。`;
+        batchMeta.textContent = `${data.mode_label || data.mode} · ${data.total} 张 · ${data.cached} 张使用缓存 · ${data.ocr_model || "official OCR"}`;
         data.results.forEach(renderResult);
-
-        resultCard.classList.remove("hidden");
+        resultPanel.classList.remove("hidden");
         message.textContent = "识别完成。";
         refreshStatus();
       } catch (error) {
         message.textContent = error.message;
       } finally {
-        submitButton.disabled = false;
-        clearFilesButton.disabled = false;
-        modeSelect.disabled = false;
-        imageInput.disabled = false;
+        setBusy(false);
       }
     });
 
@@ -218,6 +260,7 @@
       imageInput.value = "";
       updateFileSummary();
     });
+
     refreshStatus();
     preload();
     setInterval(refreshStatus, 2500);
