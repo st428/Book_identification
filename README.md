@@ -61,4 +61,3 @@ python mobile_server.py
 - `docs/final_demo_test_20260608.md`：最终演示集测试记录。
 - `docs/known_limitations.md`：已知限制和使用建议。
 - `docs/project_file_and_code_guide_20260608.md`：final 目录文件功能和 Python 代码结构说明。
-- `docs/report_writing_guidance_20260608.md`：课程项目报告写作指导。
