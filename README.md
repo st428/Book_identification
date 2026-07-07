@@ -178,7 +178,7 @@ stage5_mobile_results/final_demo_results/
 
 如果这些输出文件已提交到仓库，可以在 GitHub README 中直接展示标注图和诊断图。例如：
 
-![annotated](D:\个人\university\2026spring\lib\github_sync_Book_identification_20260608\stage5_mobile_results\final_demo_results\standard\35a7ea6497538bff_IMG20260523100857\annotated.jpg)
+![annotated](stage5_mobile_results/final_demo_results/standard/35a7ea6497538bff_IMG20260523100857/annotated.jpg)
 
 示例输出文件包括：
 
