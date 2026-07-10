@@ -8,11 +8,14 @@ stage5_mobile_results so the project code stays separate from user output.
 
 from __future__ import annotations
 
+import csv
 import hashlib
+import json
 import re
 import socket
 import threading
 import time
+from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -31,7 +34,22 @@ from shelf_inspector_fast import (
 WORKSPACE = Path(__file__).resolve().parent
 UPLOAD_DIR = WORKSPACE / "stage5_mobile_results" / "uploads"
 RESULT_DIR = WORKSPACE / "stage5_mobile_results" / "results"
+REVIEW_DIR = WORKSPACE / "stage5_mobile_results" / "reviews"
+REVIEW_JSONL_PATH = REVIEW_DIR / "review_records.jsonl"
+REVIEW_CSV_PATH = REVIEW_DIR / "review_records.csv"
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
+REVIEW_FIELDS = [
+    "review_id",
+    "result_id",
+    "image_name",
+    "crop_id",
+    "ocr_text",
+    "corrected_text",
+    "status",
+    "note",
+    "created_at",
+]
+REVIEW_STATUSES = {"confirmed", "corrected", "unreadable", "ignored"}
 
 # Web stable line: official PaddleOCR only. Bump this when Web behavior,
 # post-processing, crop rules, or cache semantics change.
@@ -60,6 +78,7 @@ ocr_ready.set()
 ocr_cache: object | None = None
 ocr_loading = False
 ocr_error: str | None = None
+review_lock = threading.Lock()
 
 
 def local_ip() -> str:
@@ -150,6 +169,123 @@ def save_uploaded_image(uploaded: object) -> Path:
 
 def result_url(path: Path) -> str:
     return url_for("result_file", filename=path.relative_to(RESULT_DIR).as_posix())
+
+
+def optional_result_url(path: Path | None) -> str:
+    """Return a browser URL for result files that are safely under RESULT_DIR."""
+    if path is None:
+        return ""
+    try:
+        resolved = path.resolve()
+        result_root = RESULT_DIR.resolve()
+        relative = resolved.relative_to(result_root)
+    except Exception:
+        return ""
+    if not resolved.exists():
+        return ""
+    return url_for("result_file", filename=relative.as_posix())
+
+
+def resolve_result_dir(result_id: str) -> Path | None:
+    """Resolve a result_id without allowing path traversal outside RESULT_DIR."""
+    if not result_id:
+        return None
+    try:
+        root = RESULT_DIR.resolve()
+        candidate = (RESULT_DIR / result_id).resolve()
+        candidate.relative_to(root)
+    except Exception:
+        return None
+    if not candidate.is_dir():
+        return None
+    return candidate
+
+
+def export_file_for(result_id: str, export_format: str) -> tuple[Path, str] | None:
+    result_dir = resolve_result_dir(result_id)
+    if result_dir is None:
+        return None
+    normalized = export_format.lower()
+    if normalized == "csv":
+        return result_dir / "report.csv", "text/csv; charset=utf-8"
+    if normalized == "json":
+        return result_dir / "summary.json", "application/json; charset=utf-8"
+    return None
+
+
+def crop_id_for(item: object) -> str:
+    crop_path = getattr(item, "crop_path", None)
+    if crop_path:
+        return Path(crop_path).stem
+    index = int(getattr(item, "index", 0) or 0)
+    return f"crop_{index:03d}" if index > 0 else f"crop_{uuid4().hex[:8]}"
+
+
+def review_timestamp() -> str:
+    return datetime.now().astimezone().isoformat(timespec="seconds")
+
+
+def normalize_review_item(payload: dict[str, object], result_id: str, image_name: str) -> dict[str, str]:
+    status = str(payload.get("status") or "").strip()
+    if status not in REVIEW_STATUSES:
+        raise ValueError(f"Unsupported review status: {status or 'empty'}")
+
+    return {
+        "review_id": f"{time.strftime('%Y%m%d_%H%M%S')}_{uuid4().hex[:8]}",
+        "result_id": result_id,
+        "image_name": image_name,
+        "crop_id": str(payload.get("crop_id") or "").strip(),
+        "ocr_text": str(payload.get("ocr_text") or "").strip(),
+        "corrected_text": str(payload.get("corrected_text") or "").strip(),
+        "status": status,
+        "note": str(payload.get("note") or "").strip(),
+        "created_at": review_timestamp(),
+    }
+
+
+def append_review_records(records: list[dict[str, str]]) -> None:
+    REVIEW_DIR.mkdir(parents=True, exist_ok=True)
+    with review_lock:
+        with REVIEW_JSONL_PATH.open("a", encoding="utf-8", newline="\n") as jsonl_file:
+            for record in records:
+                jsonl_file.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+        write_header = not REVIEW_CSV_PATH.exists() or REVIEW_CSV_PATH.stat().st_size == 0
+        with REVIEW_CSV_PATH.open("a", encoding="utf-8", newline="") as csv_file:
+            writer = csv.DictWriter(csv_file, fieldnames=REVIEW_FIELDS)
+            if write_header:
+                writer.writeheader()
+            writer.writerows(records)
+
+
+def load_review_records(result_id: str | None = None) -> list[dict[str, str]]:
+    if not REVIEW_JSONL_PATH.exists():
+        return []
+
+    records: list[dict[str, str]] = []
+    with review_lock:
+        with REVIEW_JSONL_PATH.open("r", encoding="utf-8") as jsonl_file:
+            for line in jsonl_file:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(record, dict):
+                    continue
+                if result_id and record.get("result_id") != result_id:
+                    continue
+                records.append({field: str(record.get(field) or "") for field in REVIEW_FIELDS})
+    return records
+
+
+def review_file_label() -> str:
+    try:
+        return REVIEW_JSONL_PATH.relative_to(WORKSPACE).as_posix()
+    except ValueError:
+        return str(REVIEW_JSONL_PATH)
 
 
 def current_ocr_model_tag() -> str:
@@ -269,8 +405,11 @@ def detection_review_info(item: object) -> dict[str, str]:
 
 def serialize_result(result: ImageRunResult, original_name: str) -> dict[str, object]:
     """Convert one backend result into the JSON shape consumed by the UI."""
-    diagnostics_path = (result.result_dir or result.output_dir / result.image_path.stem) / "crop_diagnostics.html"
+    result_dir = result.result_dir or result.output_dir / result.image_path.stem
+    result_id = result_dir.name
+    diagnostics_path = result_dir / "crop_diagnostics.html"
     return {
+        "result_id": result_id,
         "image": original_name,
         "stored_image": result.image_path.name,
         "rotate": result.rotate_mode,
@@ -280,10 +419,16 @@ def serialize_result(result: ImageRunResult, original_name: str) -> dict[str, ob
         "warnings": result.warnings,
         "annotated_url": result_url(result.annotated_path),
         "diagnostics_url": result_url(diagnostics_path) if diagnostics_path.exists() else "",
+        "export_csv_url": url_for("export_result", result_id=result_id, format="csv"),
+        "export_json_url": url_for("export_result", result_id=result_id, format="json"),
         "actual_order": [item.clean_text or "UNREAD" for item in result.detections],
         "order_items": [
             {
+                "crop_id": crop_id_for(item),
+                "crop_url": optional_result_url(item.crop_path),
                 "text": item.clean_text or "UNREAD",
+                "ocr_text": item.clean_text or "",
+                "raw_text": item.raw_text,
                 "status": item.status,
                 "status_label": status_label(item.status),
                 "reason": item.reason,
@@ -387,6 +532,72 @@ def inspect() -> object:
             "results": items,
         }
     )
+
+
+@app.route("/api/export")
+def export_result() -> object:
+    """Download report.csv or summary.json for a completed result directory."""
+    result_id = request.args.get("result_id", "").strip()
+    export_format = request.args.get("format", "csv").strip().lower()
+    export_target = export_file_for(result_id, export_format)
+    if export_target is None:
+        return jsonify({"ok": False, "error": "结果不存在或导出格式不支持。"}), 404
+
+    export_path, mimetype = export_target
+    if not export_path.exists():
+        return jsonify({"ok": False, "error": f"{export_format.upper()} 结果文件不存在。"}), 404
+
+    return send_from_directory(
+        export_path.parent,
+        export_path.name,
+        mimetype=mimetype,
+        as_attachment=True,
+        download_name=f"{result_id}.{export_format}",
+    )
+
+
+@app.route("/api/review", methods=["POST"])
+def save_review() -> object:
+    """Persist manual OCR review records as JSONL and CSV."""
+    payload = request.get_json(silent=True) or {}
+    result_id = str(payload.get("result_id") or "").strip()
+    image_name = str(payload.get("image_name") or "").strip()
+    items = payload.get("items") or []
+
+    if resolve_result_dir(result_id) is None:
+        return jsonify({"ok": False, "error": "结果不存在，无法保存复核记录。"}), 404
+    if not isinstance(items, list) or not items:
+        return jsonify({"ok": False, "error": "没有可保存的复核记录。"}), 400
+
+    records: list[dict[str, str]] = []
+    try:
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            records.append(normalize_review_item(item, result_id, image_name))
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+    if not records:
+        return jsonify({"ok": False, "error": "没有可保存的复核记录。"}), 400
+
+    append_review_records(records)
+    return jsonify(
+        {
+            "ok": True,
+            "saved_count": len(records),
+            "review_file": review_file_label(),
+        }
+    )
+
+
+@app.route("/api/reviews")
+def reviews() -> object:
+    """Return saved manual review records, optionally filtered by result_id."""
+    result_id = request.args.get("result_id", "").strip()
+    if result_id and resolve_result_dir(result_id) is None:
+        return jsonify({"ok": False, "error": "结果不存在。"}), 404
+    return jsonify({"ok": True, "items": load_review_records(result_id or None)})
 
 
 @app.route("/results/<path:filename>")

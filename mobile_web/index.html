@@ -73,8 +73,18 @@
       <ul class="warning-list hidden"></ul>
       <img class="annotated-image" alt="识别标注图">
       <div class="link-row">
+        <a class="export-link export-csv" target="_blank" rel="noopener">导出 CSV</a>
+        <a class="export-link export-json" target="_blank" rel="noopener">导出 JSON</a>
         <a class="diagnostics-link hidden" target="_blank" rel="noopener">crop 诊断</a>
       </div>
+      <section class="review-box">
+        <div class="review-header">
+          <h4>人工复核</h4>
+          <button class="secondary-button save-review-button" type="button">保存复核记录</button>
+        </div>
+        <div class="review-list"></div>
+        <p class="review-message meta"></p>
+      </section>
       <section class="suggestion-box">
         <h4>调架建议</h4>
         <ul class="suggestion-list"></ul>
@@ -155,6 +165,156 @@
       updateFileSummary();
     }
 
+    function defaultReviewStatus(entry) {
+      if ((entry.text || "") === "UNREAD") {
+        return "unreadable";
+      }
+      return "confirmed";
+    }
+
+    function drawRotatedCrop(imageUrl, container) {
+      container.innerHTML = "";
+      const status = document.createElement("p");
+      status.className = "crop-preview-status";
+      status.textContent = "正在加载 crop...";
+      container.appendChild(status);
+
+      const image = new Image();
+      image.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = image.naturalHeight;
+        canvas.height = image.naturalWidth;
+        const context = canvas.getContext("2d");
+        context.translate(0, canvas.height);
+        context.rotate(-Math.PI / 2);
+        context.drawImage(image, 0, 0);
+        container.innerHTML = "";
+        container.appendChild(canvas);
+        container.dataset.loaded = "true";
+      };
+      image.onerror = () => {
+        delete container.dataset.loaded;
+        status.textContent = "crop 加载失败。";
+      };
+      image.src = imageUrl;
+    }
+
+    function createReviewRow(entry, index) {
+      const row = document.createElement("div");
+      row.className = "review-row";
+      row.dataset.cropId = entry.crop_id || `crop_${String(index + 1).padStart(3, "0")}`;
+      row.dataset.ocrText = entry.ocr_text || entry.text || "";
+
+      const title = document.createElement("div");
+      title.className = "review-title";
+      const titleText = document.createElement("span");
+      titleText.textContent = `${row.dataset.cropId} · ${entry.text || "UNREAD"}`;
+      title.appendChild(titleText);
+      let cropPreview = null;
+      if (entry.crop_url) {
+        const cropButton = document.createElement("button");
+        cropButton.className = "crop-toggle";
+        cropButton.type = "button";
+        cropButton.textContent = "查看crop";
+        cropButton.addEventListener("click", () => {
+          if (!cropPreview) {
+            return;
+          }
+          const showPreview = cropPreview.classList.contains("hidden");
+          cropPreview.classList.toggle("hidden", !showPreview);
+          cropButton.textContent = showPreview ? "收起crop" : "查看crop";
+          if (showPreview && cropPreview.dataset.loaded !== "true") {
+            drawRotatedCrop(entry.crop_url, cropPreview);
+          }
+        });
+        title.appendChild(cropButton);
+      }
+
+      const statusSelect = document.createElement("select");
+      statusSelect.className = "review-status";
+      [
+        ["confirmed", "确认正确"],
+        ["corrected", "已修正"],
+        ["unreadable", "无法识别"],
+        ["ignored", "忽略"]
+      ].forEach(([value, label]) => {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = label;
+        statusSelect.appendChild(option);
+      });
+      statusSelect.value = defaultReviewStatus(entry);
+
+      const correctedInput = document.createElement("input");
+      correctedInput.className = "review-corrected";
+      correctedInput.type = "text";
+      correctedInput.placeholder = "修正后的索书号";
+      correctedInput.value = (entry.text || "") === "UNREAD" ? "" : entry.text || "";
+
+      const noteInput = document.createElement("input");
+      noteInput.className = "review-note";
+      noteInput.type = "text";
+      noteInput.placeholder = "备注";
+
+      row.appendChild(title);
+      row.appendChild(statusSelect);
+      row.appendChild(correctedInput);
+      row.appendChild(noteInput);
+      if (entry.crop_url) {
+        cropPreview = document.createElement("div");
+        cropPreview.className = "crop-preview hidden";
+        row.appendChild(cropPreview);
+      }
+      return row;
+    }
+
+    async function loadReviewSummary(node, resultId) {
+      const reviewMessage = node.querySelector(".review-message");
+      try {
+        const response = await fetch(`/api/reviews?result_id=${encodeURIComponent(resultId)}`);
+        const data = await response.json();
+        if (data.ok && data.items.length > 0) {
+          reviewMessage.textContent = `已有 ${data.items.length} 条历史复核记录。`;
+        }
+      } catch {}
+    }
+
+    async function saveReviewRecords(node, item) {
+      const reviewMessage = node.querySelector(".review-message");
+      const saveButton = node.querySelector(".save-review-button");
+      const rows = Array.from(node.querySelectorAll(".review-row"));
+      const payload = {
+        result_id: item.result_id,
+        image_name: item.image,
+        items: rows.map((row) => ({
+          crop_id: row.dataset.cropId,
+          ocr_text: row.dataset.ocrText,
+          corrected_text: row.querySelector(".review-corrected").value.trim(),
+          status: row.querySelector(".review-status").value,
+          note: row.querySelector(".review-note").value.trim()
+        }))
+      };
+
+      saveButton.disabled = true;
+      reviewMessage.textContent = "正在保存复核记录...";
+      try {
+        const response = await fetch("/api/review", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const data = await response.json();
+        if (!data.ok) {
+          throw new Error(data.error || "复核记录保存失败");
+        }
+        reviewMessage.textContent = `已保存 ${data.saved_count} 条复核记录。`;
+      } catch (error) {
+        reviewMessage.textContent = error.message;
+      } finally {
+        saveButton.disabled = false;
+      }
+    }
+
     function renderResult(item) {
       const node = resultTemplate.content.firstElementChild.cloneNode(true);
       node.querySelector(".image-name").textContent = item.image;
@@ -166,6 +326,8 @@
       node.querySelector(".red-count").textContent = item.counts.red;
       node.querySelector(".item-meta").textContent = `方向：${item.rotate || "auto"}，耗时：${item.elapsed_seconds}s`;
       node.querySelector(".annotated-image").src = `${item.annotated_url}?t=${Date.now()}`;
+      node.querySelector(".export-csv").href = item.export_csv_url || `/api/export?result_id=${encodeURIComponent(item.result_id)}&format=csv`;
+      node.querySelector(".export-json").href = item.export_json_url || `/api/export?result_id=${encodeURIComponent(item.result_id)}&format=json`;
 
       const diagnosticsLink = node.querySelector(".diagnostics-link");
       if (item.diagnostics_url) {
@@ -190,6 +352,7 @@
 
       const orderList = node.querySelector(".order-list");
       const orderItems = item.order_items || item.actual_order.map((text) => ({ text, status_label: "未知" }));
+      const reviewList = node.querySelector(".review-list");
       orderItems.forEach((entry) => {
         const li = document.createElement("li");
         li.className = `order-${entry.status || "unknown"}`;
@@ -206,6 +369,11 @@
         li.appendChild(detail);
         orderList.appendChild(li);
       });
+      orderItems.forEach((entry, index) => {
+        reviewList.appendChild(createReviewRow(entry, index));
+      });
+      node.querySelector(".save-review-button").addEventListener("click", () => saveReviewRecords(node, item));
+      loadReviewSummary(node, item.result_id);
 
       resultsList.appendChild(node);
     }

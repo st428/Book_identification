@@ -5,6 +5,7 @@ __pycache__/
 # Web runtime cache and uploads
 stage5_mobile_results/uploads/
 stage5_mobile_results/results/
+stage5_mobile_results/reviews/
 stage5_mobile_results/debug*/
 stage5_mobile_results/*probe*/
 stage5_mobile_results/*extract*/
